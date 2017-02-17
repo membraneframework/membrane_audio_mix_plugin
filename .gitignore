@@ -1,0 +1,9 @@
+/_build
+/deps
+/test*
+/priv
+*.so
+*.dll
+.DS_Store
+/doc
+erl_crash.dump
