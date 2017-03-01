@@ -41,33 +41,48 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   end
 
   @doc false
-  def handle_caps({:sink, %Membrane.Caps.Audio.Raw{format: format} = caps}, state) do
-    {:ok, sample_size} = Raw.format_to_sample_size(format)
-    {:ok, %{state | sample_size: sample_size}}
+  def handle_caps({:sink, caps}, state) do
+    {:ok, %{state | caps: caps}}
   end
 
   @doc false
-  def handle_buffer({:sink, %Membrane.Buffer{payload: payload} = buffer}, %{sample_size: sample_size} = state) do
-    max_sample_value = (1 <<< (8*sample_size-1)) - 1
-    min_sample_value = -(1 <<< (8*sample_size-1))
+  defp clipper_factory(format) do
+    {:ok, sample_size} = Raw.format_to_sample_size(format)
+    if CapsHelper.is_signed(format) do
+      max_sample_value = (1 <<< (8*sample_size-1)) - 1
+      min_sample_value = -(1 <<< (8*sample_size-1))
+      fn sample -> cond do
+          sample > max_sample_value -> max_sample_value
+          sample < min_sample_value -> min_sample_value
+          true -> sample
+        end
+      end
+    else
+      max_sample_value = (1 <<< (8*sample_size)) - 1
+      fn sample ->
+        if sample > max_sample_value do max_sample_value else sample end
+      end
+    end
+  end
+
+  @doc false
+  def handle_buffer({:sink, %Membrane.Buffer{payload: payload} = buffer}, %{caps: %Raw{format: format} = caps} = state) do
+    {:ok, sample_size} = Raw.format_to_sample_size(format)
+    clipper = clipper_factory(format)
     result = payload
       |> map(
         fn e -> e
           |> :binary.bin_to_list
           |> chunk(sample_size)
           |> map(&:erlang.list_to_binary/1)
-          |> map(&case &1 do <<s::little-signed-integer-size(sample_size)-unit(8)>> -> s end)
+          |> map(&Raw.sample_to_value!(&1, format))
         end
       )
       |> zip
       |> map(&Tuple.to_list/1)
       |> map(&sum/1)
-      |> map(&cond do
-          &1 > max_sample_value -> max_sample_value
-          &1 < min_sample_value -> min_sample_value
-          true -> &1
-        end)
-      |> map(&<<&1::little-signed-integer-size(sample_size)-unit(8)>>)
+      |> map(clipper)
+      |> map(&CapsHelper.value_to_sample!(&1, format))
 
     {:ok, result}
   end
