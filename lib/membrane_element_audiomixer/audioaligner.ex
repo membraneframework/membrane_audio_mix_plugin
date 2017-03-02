@@ -1,8 +1,14 @@
+defmodule Membrane.Element.AudioMixer.AlignerOptions do
+  defstruct \
+    chunk_time: nil
+end
+
 defmodule Membrane.Element.AudioMixer.Aligner do
 
   import Enum
   use Membrane.Element.Base.Filter
   alias Membrane.Caps.Audio.Raw
+  alias Membrane.Element.AudioMixer.AlignerOptions
 
   @source_types [
       %Raw{format: :s32le},
@@ -33,15 +39,16 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   }
 
   @empty_queue @source_pads |> into(%{}, &{&1, <<>>})
+  @empty_to_drop @source_pads |> into(%{}, &{&1, 0})
 
   @doc false
-  def handle_prepare(_) do
-    {:ok, queue: @empty_queue}
+  def handle_prepare(%AlignerOptions{chunk_time: chunk_time}) do
+    {:ok, queue: @empty_queue, chunk_time: chunk_time, chunk_size: Nil, to_drop: @empty_to_drop}
   end
 
   @doc false
-  def handle_caps({:sink, caps}, state) do
-    {:ok, %{state | caps: caps, queue: @empty_queue}}
+  def handle_caps({:sink, %Raw{sample_rate: sample_rate} = caps}, %{chunk_time: chunk_time} = state) do
+    {:ok, %{state | caps: caps, queue: @empty_queue, to_drop: @empty_to_drop, chunk_size: trunc chunk_time*sample_rate/1000}}
   end
 
   @doc false
@@ -51,9 +58,20 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   @doc false
-  def handle_other(:tick, %{queue: queue} = state) do
-    payload = queue |> into([], fn {_, v} -> v end)
-    {:ok, [{:send, {:source, %Membrane.Buffer{payload: payload}}}], state}
+  def handle_other(:tick, %{queue: queue, chunk_size: chunk_size, to_drop: to_drop} = state) do
+    ready_data_size = Kernel.min queue |> Map.values |> max_by(&byte_size/1), chunk_size
+    payload = queue
+      |> Map.values
+      |> map(fn <<p::binary-size(chunk_size)-unit(8)>> <> _ -> p end)
+
+    new_queue = queue
+      |> into(%{}, &case &1 do
+        {k, <<_::binary-size(chunk_size)-unit(8)>> <> r} -> {k, r}
+        {k, _} -> {k, <<>>}
+      end)
+    new_to_drop = to_drop |> into(%{}, fn {k, v} -> {k, v + Kernel.max(0, ready_data_size - byte_size queue[k])} end)
+
+    {:ok, [{:send, {:source, %Membrane.Buffer{payload: payload}}}], %{state | queue: new_queue, to_drop: new_to_drop}}
   end
 
   @doc false
