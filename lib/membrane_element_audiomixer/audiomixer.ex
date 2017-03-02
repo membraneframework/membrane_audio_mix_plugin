@@ -1,13 +1,9 @@
-defmodule Membrane.Element.AudioMixer.MixerOptions do
-end
-
 defmodule Membrane.Element.AudioMixer.Mixer do
 
   import Enum
   use Bitwise
   use Membrane.Element.Base.Filter
   alias Membrane.Caps.Audio.Raw
-  alias Membrane.Element.AudioMixer.MixerOptions
 
   def_known_source_pads %{
     :sink => {:always, [
@@ -20,10 +16,6 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     ]}
   }
 
-  @source_pads [:sink0, :sink1, :sink2]
-
-  def source_pads, do: @source_pads
-
   def_known_sink_pads %{
     :source => {:always, [
       %Raw{format: :s32le},
@@ -34,11 +26,6 @@ defmodule Membrane.Element.AudioMixer.Mixer do
       %Raw{format: :u8},
     ]}
   }
-
-  @doc false
-  def handle_prepare(_) do
-    {:ok}
-  end
 
   @doc false
   def handle_caps({:sink, caps}, state) do
@@ -74,7 +61,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
         fn e -> e
           |> :binary.bin_to_list
           |> chunk(sample_size)
-          |> map(&:erlang.list_to_binary/1)
+          |> map(&:binary.list_to_bin/1)
           |> map(&Raw.sample_to_value!(&1, format))
         end
       )
