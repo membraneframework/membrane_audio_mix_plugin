@@ -16,6 +16,13 @@ defmodule Membrane.Element.AudioMixer.MixerSpec do
         expect(described_module.handle_buffer({:sink, buffer}, state)).to eq {:ok, [<<3, 0>>, <<7, 0>>]}
       end
     end
+    context "if lenghts of chunks differ" do
+      let :format, do: :s16le
+      let :payload, do: [<<1, 0, 3, 0, 5, 0>>, <<2, 0, 4, 0>>]
+      it "should sum adjacent chunks and copy the rest" do
+        expect(described_module.handle_buffer({:sink, buffer}, state)).to eq {:ok, [<<3, 0>>, <<7, 0>>, <<5, 0>>]}
+      end
+    end
     context "if format is signed" do
       let :format, do: :s16le
       context "and there is overflow" do

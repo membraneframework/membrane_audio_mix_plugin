@@ -52,6 +52,19 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     end
   end
 
+  defp zip_longest(enums, already_zipped \\ []) do
+    {enums, zipped} = enums
+      |> reject(&empty?/1)
+      |> map_reduce([], fn [h|t], acc -> {t, [h | acc]} end)
+
+    if zipped |> empty? do
+      already_zipped |> reverse
+    else
+      zipped = zipped |> reverse |> List.to_tuple
+      zip_longest(enums, [zipped | already_zipped])
+    end
+  end
+
   @doc false
   def handle_buffer({:sink, %Membrane.Buffer{payload: payload} = buffer}, %{caps: %Raw{format: format} = caps} = state) do
     {:ok, sample_size} = Raw.format_to_sample_size(format)
@@ -65,7 +78,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
           |> map(&Raw.sample_to_value!(&1, format))
         end
       )
-      |> zip
+      |> zip_longest
       |> map(&Tuple.to_list/1)
       |> map(&sum/1)
       |> map(clipper)
