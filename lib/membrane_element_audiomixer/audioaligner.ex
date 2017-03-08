@@ -9,6 +9,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   use Membrane.Element.Base.Filter
   alias Membrane.Caps.Audio.Raw
   alias Membrane.Element.AudioMixer.AlignerOptions
+  alias Array
 
   @source_types [
       %Raw{format: :s32le},
@@ -19,7 +20,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
       %Raw{format: :u8},
     ]
 
-  @source_pads [:sink0, :sink1, :sink2]
+  @source_pads [sink0: 0, sink1: 1, sink2: 2]
 
   def_known_source_pads %{
     :sink0 => {:always, @source_types},
@@ -38,8 +39,8 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     ]}
   }
 
-  @empty_queue @source_pads |> into(%{}, &{&1, <<>>})
-  @empty_to_drop @source_pads |> into(%{}, &{&1, 0})
+  @empty_queue @source_pads |> into(Array.new, fn _ -> <<>> end)
+  @empty_to_drop @source_pads |> into(Array.new, fn _ -> 0 end)
 
   @doc false
   def handle_prepare(%AlignerOptions{chunk_time: chunk_time}) do
@@ -53,23 +54,24 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   @doc false
   def handle_buffer({sink, %Membrane.Buffer{payload: payload} = buffer}, %{queue: queue} = state) do
-    new_queue = queue |> Map.update!(sink, &(&1 <> payload))
+    new_queue = queue |> Array.update(@source_pads[sink], &(&1 <> payload))
     {:ok, [], %{state | queue: new_queue}}
   end
 
   @doc false
   def handle_other(:tick, %{queue: queue, chunk_size: chunk_size, to_drop: to_drop} = state) do
-    ready_data_size = Kernel.min queue |> Map.values |> max_by(&byte_size/1), chunk_size
-    payload = queue
-      |> Map.values
-      |> map(fn <<p::binary-size(chunk_size)-unit(8)>> <> _ -> p end)
+    ready_data_size = Kernel.min(queue |> max_by(&byte_size/1), chunk_size)
+    payload = queue |> map(&case &1 do
+      <<p::binary-size(ready_data_size)-unit(8)>> <> _ -> p
+      p -> p
+    end)
 
-    new_queue = queue
-      |> into(%{}, &case &1 do
-        {k, <<_::binary-size(chunk_size)-unit(8)>> <> r} -> {k, r}
-        {k, _} -> {k, <<>>}
+    new_queue = queue |> into(Array.new, &case &1 do
+        <<_::binary-size(ready_data_size)-unit(8)>> <> r -> r
+        _ -> <<>>
       end)
-    new_to_drop = to_drop |> into(%{}, fn {k, v} -> {k, v + Kernel.max(0, ready_data_size - byte_size queue[k])} end)
+
+    new_to_drop = to_drop |> with_index |> into(Array.new, fn {v, k} -> v + Kernel.max(0, ready_data_size - byte_size queue[k]) end)
 
     {:ok, [{:send, {:source, %Membrane.Buffer{payload: payload}}}], %{state | queue: new_queue, to_drop: new_to_drop}}
   end
