@@ -69,7 +69,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   def handle_buffer({:sink, %Membrane.Buffer{payload: payload} = buffer}, %{caps: %Raw{format: format} = caps} = state) do
     {:ok, sample_size} = Raw.format_to_sample_size(format)
     clipper = clipper_factory(format)
-    result = payload
+    mixed_payload = payload
       |> map(
         fn e -> e
           |> :binary.bin_to_list
@@ -84,7 +84,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
       |> map(clipper)
       |> map(&CapsHelper.value_to_sample!(&1, format))
 
-    {:ok, result}
+    {:ok, [{:send, {:source, %Membrane.Buffer{payload: mixed_payload}}}], state}
   end
 
   @doc false
