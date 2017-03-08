@@ -66,9 +66,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     {:ok, [], %{state | queue: new_queue, to_drop: new_to_drop}}
   end
 
-
-
-  def unzip(enum, tuple_size, already_unzipped \\ []) do
+  defp unzip(enum, tuple_size, already_unzipped \\ []) when tuple_size >= 2 do
     if tuple_size == 2 do
       {a, b} = enum |> unzip
       ([b, a] ++ already_unzipped) |> reverse |> List.to_tuple
