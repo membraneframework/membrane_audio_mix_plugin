@@ -53,25 +53,44 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   @doc false
-  def handle_buffer({sink, %Membrane.Buffer{payload: payload} = buffer}, %{queue: queue} = state) do
-    new_queue = queue |> Array.update(@source_pads[sink], &(&1 <> payload))
-    {:ok, [], %{state | queue: new_queue}}
+  def handle_buffer({sink, %Membrane.Buffer{payload: payload} = buffer}, %{queue: queue, to_drop: to_drop} = state) do
+    sink_no = @source_pads[sink]
+    sink_to_drop = to_drop[sink_no]
+    cut_payload = case payload do
+      <<_::binary-size(sink_to_drop)-unit(8)>> <> r -> r
+      _ -> <<>>
+    end
+    new_to_drop = to_drop |> Array.set(sink_no, Kernel.max(0, sink_to_drop - byte_size payload))
+    new_queue = queue |> Array.update(sink_no, &(&1 <> cut_payload))
+
+    {:ok, [], %{state | queue: new_queue, to_drop: new_to_drop}}
+  end
+
+
+
+  def unzip(enum, tuple_size, already_unzipped \\ []) do
+    if tuple_size == 2 do
+      {a, b} = enum |> unzip
+      ([b, a] ++ already_unzipped) |> reverse |> List.to_tuple
+    else
+      {a, b} = enum |> map(&{&1 |> elem(0), &1 |> Tuple.delete_at(0)}) |> unzip
+      unzip b, tuple_size - 1, [a | already_unzipped]
+    end
   end
 
   @doc false
   def handle_other(:tick, %{queue: queue, chunk_size: chunk_size, to_drop: to_drop} = state) do
     ready_data_size = Kernel.min(queue |> max_by(&byte_size/1), chunk_size)
-    payload = queue |> map(&case &1 do
-      <<p::binary-size(ready_data_size)-unit(8)>> <> _ -> p
-      p -> p
-    end)
 
-    new_queue = queue |> into(Array.new, &case &1 do
-        <<_::binary-size(ready_data_size)-unit(8)>> <> r -> r
-        _ -> <<>>
-      end)
-
-    new_to_drop = to_drop |> with_index |> into(Array.new, fn {v, k} -> v + Kernel.max(0, ready_data_size - byte_size queue[k]) end)
+    {payload, new_queue, new_to_drop} = zip(queue, to_drop)
+      |> map(fn {data, to_drop} ->
+          case data do
+            <<p::binary-size(ready_data_size)-unit(8)>> <> r -> {p, r, to_drop}
+            _ -> {data, <<>>, ready_data_size - byte_size(data)}
+          end
+        end)
+      |> unzip(3)
+      |> case do {p, q, d} -> {p, q |> into(Array.new), d |> into(Array.new)} end
 
     {:ok, [{:send, {:source, %Membrane.Buffer{payload: payload}}}], %{state | queue: new_queue, to_drop: new_to_drop}}
   end
