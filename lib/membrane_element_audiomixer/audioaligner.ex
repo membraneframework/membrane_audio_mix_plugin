@@ -20,7 +20,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
       %Raw{format: :u8},
     ]
 
-  @source_pads [sink0: 0, sink1: 1, sink2: 2]
+  @source_pads %{sink0: 0, sink1: 1, sink2: 2}
 
   def_known_source_pads %{
     :sink0 => {:always, @source_types},
@@ -54,7 +54,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   @doc false
   def handle_buffer({sink, %Membrane.Buffer{payload: payload} = buffer}, %{queue: queue, to_drop: to_drop} = state) do
-    sink_no = @source_pads[sink]
+    %{^sink => sink_no} = @source_pads
     sink_to_drop = to_drop[sink_no]
     cut_payload = case payload do
       <<_::binary-size(sink_to_drop)-unit(8)>> <> r -> r
@@ -66,13 +66,13 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     {:ok, [], %{state | queue: new_queue, to_drop: new_to_drop}}
   end
 
-  defp unzip(enum, tuple_size, already_unzipped \\ []) when tuple_size >= 2 do
+  defp unzip(enum, tuple_size, acc \\ []) when tuple_size >= 2 do
     if tuple_size == 2 do
       {a, b} = enum |> unzip
-      ([b, a] ++ already_unzipped) |> reverse |> List.to_tuple
+      ([b, a] ++ acc) |> reverse |> List.to_tuple
     else
       {a, b} = enum |> map(&{&1 |> elem(0), &1 |> Tuple.delete_at(0)}) |> unzip
-      unzip b, tuple_size - 1, [a | already_unzipped]
+      unzip b, tuple_size - 1, [a | acc]
     end
   end
 

@@ -38,7 +38,8 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     if CapsHelper.is_signed(format) do
       max_sample_value = (1 <<< (8*sample_size-1)) - 1
       min_sample_value = -(1 <<< (8*sample_size-1))
-      fn sample -> cond do
+      fn sample ->
+        cond do
           sample > max_sample_value -> max_sample_value
           sample < min_sample_value -> min_sample_value
           true -> sample
@@ -52,37 +53,46 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     end
   end
 
-  defp zip_longest(enums, already_zipped \\ []) do
+  defp zip_longest(enums, acc \\ []) do
     {enums, zipped} = enums
       |> reject(&empty?/1)
       |> map_reduce([], fn [h|t], acc -> {t, [h | acc]} end)
 
     if zipped |> empty? do
-      already_zipped |> reverse
+      reverse acc
     else
       zipped = zipped |> reverse |> List.to_tuple
-      zip_longest(enums, [zipped | already_zipped])
+      zip_longest(enums, [zipped | acc])
     end
   end
 
+  def chunk_binary(binary, chunk_size, acc \\ []) do
+    case binary do
+      <<chunk::binary-size(chunk_size)-unit(8)>> <> rest -> chunk_binary rest, chunk_size, [chunk | acc]
+      _ -> reverse acc
+    end
+  end
+
+  def mix(samples, mix_params, acc \\ 0)
+  def mix([], %{format: format, clipper: clipper}, acc) do
+    {:ok, sample} = acc |> clipper.() |> CapsHelper.value_to_sample(format)
+    sample
+  end
+  def mix([h|t], %{format: format} = mix_params, acc) do
+    {:ok, value} = h |> Raw.sample_to_value(format)
+    mix t, mix_params, acc + value
+  end
+  def mix_params(format) do
+    %{format: format, clipper: clipper_factory(format)}
+  end
+
   @doc false
-  def handle_buffer({:sink, %Membrane.Buffer{payload: payload} = buffer}, %{caps: %Raw{format: format} = caps} = state) do
+  def handle_buffer({:sink, %Membrane.Buffer{payload: payload}}, %{caps: %Raw{format: format}} = state) do
     {:ok, sample_size} = Raw.format_to_sample_size(format)
-    clipper = clipper_factory(format)
     mixed_payload = payload
-      |> map(
-        fn e -> e
-          |> :binary.bin_to_list
-          |> chunk(sample_size)
-          |> map(&:binary.list_to_bin/1)
-          |> map(&Raw.sample_to_value!(&1, format))
-        end
-      )
+      |> map(&chunk_binary &1, sample_size)
       |> zip_longest
-      |> map(&Tuple.to_list/1)
-      |> map(&sum/1)
-      |> map(clipper)
-      |> map(&CapsHelper.value_to_sample!(&1, format))
+      |> map(fn t -> t |> Tuple.to_list |> mix(mix_params format) end)
 
     {:ok, [{:send, {:source, %Membrane.Buffer{payload: mixed_payload}}}], state}
   end
