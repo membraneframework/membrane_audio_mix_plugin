@@ -33,13 +33,13 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
   end
 
   describe ".handle_other/1" do
-    let :state, do: %{queue: queue, chunk_size: chunk_size, to_drop: to_drop}
+    let :state, do: %{queue: queue, chunk_size: chunk_size, to_drop: to_drop, sample_size: 1}
     let :chunk_size, do: 3
     let :to_drop, do: empty_to_drop
-    defp handle_other_ok_result([payload: payload, state: state]) do
+    defp handle_other_ok_result([data: data, remaining_size: remaining_size, state: state]) do
       {
         :ok,
-        [{:send, {:source, %Membrane.Buffer{payload: payload}}}],
+        [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_size: remaining_size}}}}],
         state
       }
     end
@@ -48,7 +48,8 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
       let :queue, do: simple_queue
       it "should parse and send queue as a buffer" do
         expect(described_module.handle_other :tick, state).to eq handle_other_ok_result([
-          payload: queue |> Array.to_list,
+          data: queue |> Array.to_list,
+          remaining_size: 0,
           state: %{state | queue: empty_queue}]
         )
       end
@@ -58,7 +59,8 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
         let :queue, do: simple_queue |> Array.set(1, <<1,2>>)
         it "should forward queue and update to_drop" do
           expect(described_module.handle_other :tick, state).to eq handle_other_ok_result([
-            payload: queue |> Array.to_list,
+            data: queue |> Array.to_list,
+            remaining_size: 0,
             state: %{state | queue: empty_queue, to_drop: Array.from_list [0, 1, 0]}
           ])
         end
@@ -67,8 +69,19 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
         let :queue, do: simple_queue |> Array.set(1, <<1,2,3,4>>)
         it "should forward queue and store excess in the new queue" do
           expect(described_module.handle_other :tick, state).to eq handle_other_ok_result([
-            payload: queue |> Array.set(1, <<1,2,3>>) |> Array.to_list,
+            data: queue |> Array.set(1, <<1,2,3>>) |> Array.to_list,
+            remaining_size: 0,
             state: %{state | queue: empty_queue |> Array.set(1, <<4>>)}
+          ])
+        end
+      end
+      context "and all of them lack data" do
+        let :queue, do: empty_queue |> Array.set(1, <<1,2>>)
+        it "should forward queue and store excess in the new queue" do
+          expect(described_module.handle_other :tick, state).to eq handle_other_ok_result([
+            data: queue |> Array.set(1, <<1,2>>) |> Array.to_list,
+            remaining_size: 1,
+            state: %{state | queue: empty_queue, to_drop: Array.from_list [3, 1, 3]}
           ])
         end
       end

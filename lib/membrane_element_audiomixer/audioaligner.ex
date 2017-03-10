@@ -48,8 +48,18 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   @doc false
-  def handle_caps({:sink, %Raw{sample_rate: sample_rate} = caps}, %{chunk_time: chunk_time} = state) do
-    {:ok, %{state | caps: caps, queue: @empty_queue, to_drop: @empty_to_drop, chunk_size: trunc chunk_time*sample_rate/1000}}
+  def handle_caps({:sink, %Raw{sample_rate: sample_rate, format: format} = caps}, %{chunk_time: chunk_time} = state) do
+    sample_size = Raw.format_to_sample_size format
+    {
+      :ok,
+      %{state |
+        caps: caps,
+        sample_size: sample_size,
+        queue: @empty_queue,
+        to_drop: @empty_to_drop,
+        chunk_size: trunc sample_size*chunk_time*sample_rate/1000
+      }
+    }
   end
 
   @doc false
@@ -77,20 +87,21 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   @doc false
-  def handle_other(:tick, %{queue: queue, chunk_size: chunk_size, to_drop: to_drop} = state) do
-    ready_data_size = Kernel.min(queue |> max_by(&byte_size/1), chunk_size)
+  def handle_other(:tick, %{queue: queue, chunk_size: chunk_size, to_drop: to_drop, sample_size: sample_size} = state) do
 
-    {payload, new_queue, new_to_drop} = zip(queue, to_drop)
+    {data, new_queue, new_to_drop} = zip(queue, to_drop)
       |> map(fn {data, to_drop} ->
           case data do
-            <<p::binary-size(ready_data_size)-unit(8)>> <> r -> {p, r, to_drop}
-            _ -> {data, <<>>, ready_data_size - byte_size(data)}
+            <<p::binary-size(chunk_size)-unit(8)>> <> r -> {p, r, to_drop}
+            _ -> {data, <<>>, chunk_size - byte_size(data)}
           end
         end)
       |> unzip(3)
       |> case do {p, q, d} -> {p, q |> into(Array.new), d |> into(Array.new)} end
 
-    {:ok, [{:send, {:source, %Membrane.Buffer{payload: payload}}}], %{state | queue: new_queue, to_drop: new_to_drop}}
+    remaining_size = (chunk_size - byte_size(data |> max_by(&byte_size/1))) * sample_size
+
+    {:ok, [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_size: remaining_size}}}}], %{state | queue: new_queue, to_drop: new_to_drop}}
   end
 
   @doc false

@@ -3,10 +3,11 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   import Enum
   use Bitwise
   use Membrane.Element.Base.Filter
-  alias Membrane.Caps.Audio.Raw
+  alias CapsHelper, as: Raw
 
   def_known_source_pads %{
     :sink => {:always, [
+      %Raw{format: :f32le},
       %Raw{format: :s32le},
       %Raw{format: :s16le},
       %Raw{format: :u32le},
@@ -18,6 +19,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
 
   def_known_sink_pads %{
     :source => {:always, [
+      %Raw{format: :f32le},
       %Raw{format: :s32le},
       %Raw{format: :s16le},
       %Raw{format: :u32le},
@@ -34,10 +36,9 @@ defmodule Membrane.Element.AudioMixer.Mixer do
 
   @doc false
   defp clipper_factory(format) do
-    {:ok, sample_size} = Raw.format_to_sample_size(format)
+    max_sample_value = Raw.sample_max(format)
     if CapsHelper.is_signed(format) do
-      max_sample_value = (1 <<< (8*sample_size-1)) - 1
-      min_sample_value = -(1 <<< (8*sample_size-1))
+      min_sample_value = Raw.sample_min(format)
       fn sample ->
         cond do
           sample > max_sample_value -> max_sample_value
@@ -46,7 +47,6 @@ defmodule Membrane.Element.AudioMixer.Mixer do
         end
       end
     else
-      max_sample_value = (1 <<< (8*sample_size)) - 1
       fn sample ->
         if sample > max_sample_value do max_sample_value else sample end
       end
@@ -87,14 +87,16 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   end
 
   @doc false
-  def handle_buffer({:sink, %Membrane.Buffer{payload: payload}}, %{caps: %Raw{format: format}} = state) do
+  def handle_buffer({:sink, %Membrane.Buffer{payload: %{data: data, remaining_size: remaining_size}}}, %{caps: %Raw{format: format}} = state) do
     {:ok, sample_size} = Raw.format_to_sample_size(format)
-    mixed_payload = payload
+    payload = data
       |> map(&chunk_binary &1, sample_size)
       |> zip_longest
       |> map(fn t -> t |> Tuple.to_list |> mix(mix_params format) end)
+      |> concat(0..remaining_size |> drop(1) |> map(fn _ -> Raw.sound_of_silence format end))
+      |> :binary.list_to_bin
 
-    {:ok, [{:send, {:source, %Membrane.Buffer{payload: mixed_payload}}}], state}
+    {:ok, [{:send, {:source, %Membrane.Buffer{payload: payload}}}], state}
   end
 
   @doc false
