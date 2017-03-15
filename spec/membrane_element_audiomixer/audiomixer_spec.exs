@@ -14,7 +14,7 @@ defmodule Membrane.Element.AudioMixer.MixerSpec do
     context "in usual case" do
       let :format, do: :s16le
       let :remaining_samples_cnt, do: 0
-      let :data, do: [<<1, 0, 3, 0, 5>>, <<2, 0, 4, 0, 6>>]
+      let :data, do: [<<1, 0, 3, 0>>, <<2, 0, 4, 0>>]
       it "should properly sum chunks" do
         expect(described_module.handle_buffer({:sink, buffer}, state)).to eq handle_buffer_ok_result [payload: <<3, 0, 7, 0>>, state: state]
       end
@@ -56,9 +56,25 @@ defmodule Membrane.Element.AudioMixer.MixerSpec do
     context "if remaining_samples_cnt is positive" do
       let :format, do: :s16le
       let :remaining_samples_cnt, do: 2
-      let :data, do: [<<1, 0, 3, 0, 5>>, <<2, 0, 4, 0, 6>>]
+      let :data, do: [<<1, 0, 3, 0>>, <<2, 0, 4, 0>>]
       it "should add a remaining_samples_cnt-long silent part to the mixed data" do
         expect(described_module.handle_buffer({:sink, buffer}, state)).to eq handle_buffer_ok_result [payload: <<3, 0, 7, 0, 0, 0, 0, 0>>, state: state]
+      end
+    end
+    context "if some paths contain incomplete sample" do
+      let :format, do: :s16le
+      let :remaining_samples_cnt, do: 0
+      context "and one of them is the longest path" do
+        let :data, do: [<<1, 0, 3, 0, 5>>, <<2, 0, 4, 0>>, <<1,0,3>>]
+        it "should skip incomplete samples" do
+          expect(described_module.handle_buffer({:sink, buffer}, state)).to eq handle_buffer_ok_result [payload: <<4, 0, 7, 0>>, state: state]
+        end
+      end
+      context "and none of them is the longest path" do
+        let :data, do: [<<1, 0, 3, 0>>, <<2>>, <<1, 0, 3>>]
+        it "should skip incomplete samples" do
+          expect(described_module.handle_buffer({:sink, buffer}, state)).to eq handle_buffer_ok_result [payload: <<2, 0, 3, 0>>, state: state]
+        end
       end
     end
   end
