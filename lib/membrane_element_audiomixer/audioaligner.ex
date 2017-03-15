@@ -42,9 +42,18 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   @empty_queue @source_pads |> into(Array.new, fn _ -> <<>> end)
   @empty_to_drop @source_pads |> into(Array.new, fn _ -> 0 end)
 
+  def time_supplier, do: Application.get_env :membrane_element_audiomixer, :time_supplier
+
   @doc false
   def handle_prepare(%AlignerOptions{chunk_time: chunk_time}) do
-    {:ok, queue: @empty_queue, chunk_time: chunk_time, chunk_size: Nil, to_drop: @empty_to_drop}
+    Mix.Config.config :"Membrane.Element.AudioMixer", time_supplier: System
+    {:ok, queue: @empty_queue, chunk_time: chunk_time, chunk_size: Nil, to_drop: @empty_to_drop, timer: Nil, previous_tick: Nil}
+  end
+
+  @doc false
+  def handle_play(%{chunk_time: chunk_time} = state) do
+    {:ok, timer} = :timer.send_interval(chunk_time)
+    %{state | timer: timer, previous_tick: time_supplier().monotonic_time}
   end
 
   @doc false
@@ -55,9 +64,9 @@ defmodule Membrane.Element.AudioMixer.Aligner do
       %{state |
         caps: caps,
         sample_size: sample_size,
+        sample_rate: sample_rate,
         queue: @empty_queue,
         to_drop: @empty_to_drop,
-        chunk_size: trunc sample_size*chunk_time*sample_rate/1000
       }
     }
   end
@@ -86,9 +95,15 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     end
   end
 
-  @doc false
-  def handle_other(:tick, %{queue: queue, chunk_size: chunk_size, to_drop: to_drop, sample_size: sample_size} = state) do
+  def current_chunk_size(previous_tick, sample_size, sample_rate) do
+    duration = time_supplier().convert_time_unit(time_supplier().monotonic_time - previous_tick, :native, :milliseconds)
+    trunc sample_size*duration*sample_rate/1000
+  end
 
+  @doc false
+  def handle_other(:tick, %{queue: queue, to_drop: to_drop, sample_size: sample_size, sample_rate: sample_rate, previous_tick: previous_tick} = state) do
+    chunk_size = current_chunk_size previous_tick, sample_size, sample_rate
+    # TODO: handle parts of samples
     {data, new_queue, new_to_drop} = zip(queue, to_drop)
       |> map(fn {data, to_drop} ->
           case data do
@@ -105,7 +120,8 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   @doc false
-  def handle_stop(state) do
-    {:ok, state}
+  def handle_stop(%{timer: timer} = state) do
+    {:ok, :cancel} = :timer.cancel timer
+    {:ok, %{state | timer: Nil, previous_tick: Nil}}
   end
 end

@@ -4,6 +4,14 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
   import Enum
   alias Array
 
+  defmodule FakeTimeSupplier do
+    def convert_time_unit(time, _, _), do: time
+    def monotonic_time, do: 100
+  end
+  before_all do
+    Application.put_env :membrane_element_audiomixer, :time_supplier, FakeTimeSupplier
+  end
+
   let :empty_queue, do: Array.from_list [<<>>,<<>>,<<>>]
   let :simple_queue, do: Array.from_list [<<1,2,3>>,<<4,5,6>>,<<7,8,9>>]
   let :empty_to_drop, do: Array.from_list [0, 0, 0]
@@ -32,8 +40,8 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
   end
 
   describe ".handle_other/1" do
-    let :state, do: %{queue: queue, chunk_size: chunk_size, to_drop: to_drop, sample_size: 1}
-    let :chunk_size, do: 3
+    let :state, do: %{queue: queue, sample_rate: 3000, sample_size: 1, previous_tick: 99, to_drop: to_drop}
+    let :chunk_time, do: 1
     let :to_drop, do: empty_to_drop
     defp handle_other_ok_result([data: data, remaining_samples_cnt: remaining_samples_cnt, state: state]) do
       {
