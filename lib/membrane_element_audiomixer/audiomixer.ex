@@ -87,13 +87,13 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   end
 
   @doc false
-  def handle_buffer({:sink, %Membrane.Buffer{payload: %{data: data, remaining_size: remaining_size}}}, %{caps: %Caps{format: format}} = state) do
+  def handle_buffer({:sink, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}, %{caps: %Caps{format: format}} = state) do
     {:ok, sample_size} = Caps.format_to_sample_size(format)
     payload = data
       |> map(&chunk_binary &1, sample_size)
       |> zip_longest
       |> map(fn t -> t |> Tuple.to_list |> mix(mix_params format) end)
-      |> concat(0..remaining_size |> drop(1) |> map(fn _ -> Caps.sound_of_silence format end))
+      |> concat(0..remaining_samples_cnt |> drop(1) |> map(fn _ -> Caps.sound_of_silence format end))
       |> :binary.list_to_bin
 
     {:ok, [{:send, {:source, %Membrane.Buffer{payload: payload}}}], state}

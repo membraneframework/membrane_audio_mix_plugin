@@ -99,9 +99,9 @@ defmodule Membrane.Element.AudioMixer.Aligner do
       |> unzip(3)
       |> case do {p, q, d} -> {p, q |> into(Array.new), d |> into(Array.new)} end
 
-    remaining_size = (chunk_size - byte_size(data |> max_by(&byte_size/1))) * sample_size
+    remaining_samples_cnt = (chunk_size - byte_size(data |> max_by(&byte_size/1))) / sample_size
 
-    {:ok, [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_size: remaining_size}}}}], %{state | queue: new_queue, to_drop: new_to_drop}}
+    {:ok, [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}}], %{state | queue: new_queue, to_drop: new_to_drop}}
   end
 
   @doc false

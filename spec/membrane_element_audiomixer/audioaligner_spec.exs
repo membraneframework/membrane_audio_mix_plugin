@@ -35,10 +35,10 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
     let :state, do: %{queue: queue, chunk_size: chunk_size, to_drop: to_drop, sample_size: 1}
     let :chunk_size, do: 3
     let :to_drop, do: empty_to_drop
-    defp handle_other_ok_result([data: data, remaining_size: remaining_size, state: state]) do
+    defp handle_other_ok_result([data: data, remaining_samples_cnt: remaining_samples_cnt, state: state]) do
       {
         :ok,
-        [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_size: remaining_size}}}}],
+        [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}}],
         state
       }
     end
@@ -48,7 +48,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
       it "should parse and send queue as a buffer" do
         expect(described_module.handle_other :tick, state).to eq handle_other_ok_result([
           data: queue |> Array.to_list,
-          remaining_size: 0,
+          remaining_samples_cnt: 0,
           state: %{state | queue: empty_queue}]
         )
       end
@@ -59,7 +59,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
         it "should forward queue and update to_drop" do
           expect(described_module.handle_other :tick, state).to eq handle_other_ok_result([
             data: queue |> Array.to_list,
-            remaining_size: 0,
+            remaining_samples_cnt: 0,
             state: %{state | queue: empty_queue, to_drop: Array.from_list [0, 1, 0]}
           ])
         end
@@ -69,7 +69,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
         it "should forward queue and store excess in the new queue" do
           expect(described_module.handle_other :tick, state).to eq handle_other_ok_result([
             data: queue |> Array.set(1, <<1,2,3>>) |> Array.to_list,
-            remaining_size: 0,
+            remaining_samples_cnt: 0,
             state: %{state | queue: empty_queue |> Array.set(1, <<4>>)}
           ])
         end
@@ -79,7 +79,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
         it "should forward queue and store excess in the new queue" do
           expect(described_module.handle_other :tick, state).to eq handle_other_ok_result([
             data: queue |> Array.set(1, <<1,2>>) |> Array.to_list,
-            remaining_size: 1,
+            remaining_samples_cnt: 1,
             state: %{state | queue: empty_queue, to_drop: Array.from_list [3, 1, 3]}
           ])
         end
