@@ -7,17 +7,17 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   import Enum
   use Membrane.Element.Base.Filter
-  alias Membrane.Caps.Audio.Raw
+  alias Membrane.Caps.Audio.Raw, as: Caps
   alias Membrane.Element.AudioMixer.AlignerOptions
   alias Array
 
   @source_types [
-      %Raw{format: :s32le},
-      %Raw{format: :s16le},
-      %Raw{format: :u32le},
-      %Raw{format: :u16le},
-      %Raw{format: :s8},
-      %Raw{format: :u8},
+      %Caps{format: :s32le},
+      %Caps{format: :s16le},
+      %Caps{format: :u32le},
+      %Caps{format: :u16le},
+      %Caps{format: :s8},
+      %Caps{format: :u8},
     ]
 
   @source_pads %{sink0: 0, sink1: 1, sink2: 2}
@@ -30,12 +30,12 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   def_known_sink_pads %{
     :source => {:always, [
-      %Raw{format: :s32le},
-      %Raw{format: :s16le},
-      %Raw{format: :u32le},
-      %Raw{format: :u16le},
-      %Raw{format: :s8},
-      %Raw{format: :u8},
+      %Caps{format: :s32le},
+      %Caps{format: :s16le},
+      %Caps{format: :u32le},
+      %Caps{format: :u16le},
+      %Caps{format: :s8},
+      %Caps{format: :u8},
     ]}
   }
 
@@ -48,7 +48,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   @doc false
-  def handle_caps({:sink, %Raw{sample_rate: sample_rate, format: format} = caps}, %{chunk_time: chunk_time} = state) do
+  def handle_caps({:sink, %Caps{sample_rate: sample_rate, format: format} = caps}, %{chunk_time: chunk_time} = state) do
     sample_size = Raw.format_to_sample_size format
     {
       :ok,

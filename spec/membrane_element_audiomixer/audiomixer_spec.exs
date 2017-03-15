@@ -1,10 +1,10 @@
 defmodule Membrane.Element.AudioMixer.MixerSpec do
   use ESpec, async: false
   use Bitwise
-  alias CapsHelper, as: Raw
+  alias Membrane.Caps.Audio.Raw, as: Caps
 
   describe ".handle_buffer/1" do
-    let :state, do: %{caps: %Raw{format: format}}
+    let :state, do: %{caps: %Caps{format: format}}
     let :buffer, do: %Membrane.Buffer{payload: %{data: data, remaining_size: remaining_size}}
     let :remaining_size, do: 0
     defp handle_buffer_ok_result [payload: payload, state: state] do

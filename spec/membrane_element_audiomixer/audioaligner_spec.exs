@@ -2,7 +2,6 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
   use ESpec, async: false
   use Bitwise
   import Enum
-  alias Membrane.Caps.Audio.Raw
   alias Array
 
   let :empty_queue, do: Array.from_list [<<>>,<<>>,<<>>]

@@ -3,29 +3,29 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   import Enum
   use Bitwise
   use Membrane.Element.Base.Filter
-  alias CapsHelper, as: Raw
+  alias Membrane.Caps.Audio.Raw, as: Caps
 
   def_known_source_pads %{
     :sink => {:always, [
-      %Raw{format: :f32le},
-      %Raw{format: :s32le},
-      %Raw{format: :s16le},
-      %Raw{format: :u32le},
-      %Raw{format: :u16le},
-      %Raw{format: :s8},
-      %Raw{format: :u8},
+      %Caps{format: :f32le},
+      %Caps{format: :s32le},
+      %Caps{format: :s16le},
+      %Caps{format: :u32le},
+      %Caps{format: :u16le},
+      %Caps{format: :s8},
+      %Caps{format: :u8},
     ]}
   }
 
   def_known_sink_pads %{
     :source => {:always, [
-      %Raw{format: :f32le},
-      %Raw{format: :s32le},
-      %Raw{format: :s16le},
-      %Raw{format: :u32le},
-      %Raw{format: :u16le},
-      %Raw{format: :s8},
-      %Raw{format: :u8},
+      %Caps{format: :f32le},
+      %Caps{format: :s32le},
+      %Caps{format: :s16le},
+      %Caps{format: :u32le},
+      %Caps{format: :u16le},
+      %Caps{format: :s8},
+      %Caps{format: :u8},
     ]}
   }
 
@@ -36,9 +36,9 @@ defmodule Membrane.Element.AudioMixer.Mixer do
 
   @doc false
   defp clipper_factory(format) do
-    max_sample_value = Raw.sample_max(format)
-    if CapsHelper.is_signed(format) do
-      min_sample_value = Raw.sample_min(format)
+    max_sample_value = Caps.sample_max(format)
+    if Caps.is_signed(format) do
+      min_sample_value = Caps.sample_min(format)
       fn sample ->
         cond do
           sample > max_sample_value -> max_sample_value
@@ -75,11 +75,11 @@ defmodule Membrane.Element.AudioMixer.Mixer do
 
   def mix(samples, mix_params, acc \\ 0)
   def mix([], %{format: format, clipper: clipper}, acc) do
-    {:ok, sample} = acc |> clipper.() |> CapsHelper.value_to_sample(format)
+    {:ok, sample} = acc |> clipper.() |> Caps.value_to_sample(format)
     sample
   end
   def mix([h|t], %{format: format} = mix_params, acc) do
-    {:ok, value} = h |> Raw.sample_to_value(format)
+    {:ok, value} = h |> Caps.sample_to_value(format)
     mix t, mix_params, acc + value
   end
   def mix_params(format) do
@@ -87,13 +87,13 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   end
 
   @doc false
-  def handle_buffer({:sink, %Membrane.Buffer{payload: %{data: data, remaining_size: remaining_size}}}, %{caps: %Raw{format: format}} = state) do
-    {:ok, sample_size} = Raw.format_to_sample_size(format)
+  def handle_buffer({:sink, %Membrane.Buffer{payload: %{data: data, remaining_size: remaining_size}}}, %{caps: %Caps{format: format}} = state) do
+    {:ok, sample_size} = Caps.format_to_sample_size(format)
     payload = data
       |> map(&chunk_binary &1, sample_size)
       |> zip_longest
       |> map(fn t -> t |> Tuple.to_list |> mix(mix_params format) end)
-      |> concat(0..remaining_size |> drop(1) |> map(fn _ -> Raw.sound_of_silence format end))
+      |> concat(0..remaining_size |> drop(1) |> map(fn _ -> Caps.sound_of_silence format end))
       |> :binary.list_to_bin
 
     {:ok, [{:send, {:source, %Membrane.Buffer{payload: payload}}}], state}
