@@ -22,6 +22,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   alias Array
 
   @source_types [
+      %Caps{format: :f32le},
       %Caps{format: :s32le},
       %Caps{format: :s16le},
       %Caps{format: :u32le},
@@ -40,6 +41,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   def_known_sink_pads %{
     :source => {:always, [
+      %Caps{format: :f32le},
       %Caps{format: :s32le},
       %Caps{format: :s16le},
       %Caps{format: :u32le},
