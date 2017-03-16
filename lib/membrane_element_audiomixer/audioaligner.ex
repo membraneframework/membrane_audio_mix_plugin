@@ -6,6 +6,7 @@ end
 defmodule Membrane.Element.AudioMixer.Aligner do
 
   import Enum
+  import Membrane.Helper.Enum
   use Membrane.Element.Base.Filter
   alias Membrane.Caps.Audio.Raw, as: Caps
   alias Membrane.Element.AudioMixer.AlignerOptions
@@ -84,16 +85,6 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     {:ok, [], %{state | queue: new_queue, to_drop: new_to_drop}}
   end
 
-  defp unzip(enum, tuple_size, acc \\ []) when tuple_size >= 2 do
-    if tuple_size == 2 do
-      {a, b} = enum |> unzip
-      ([b, a] ++ acc) |> reverse |> List.to_tuple
-    else
-      {a, b} = enum |> map(&{&1 |> elem(0), &1 |> Tuple.delete_at(0)}) |> unzip
-      unzip b, tuple_size - 1, [a | acc]
-    end
-  end
-
   defp current_chunk_size(current_tick, previous_tick, sample_size, sample_rate) do
     duration = @time_supplier.convert_time_unit(current_tick - previous_tick, :native, :milliseconds)
     trunc sample_size*duration*sample_rate/1000
@@ -110,7 +101,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
             _ -> {data, <<>>, chunk_size - byte_size(data)}
           end
         end)
-      |> unzip(3)
+      |> unzip!(3)
       |> case do {p, q, d} -> {p, q |> into(Array.new), d |> into(Array.new)} end
 
     remaining_samples_cnt = (chunk_size - byte_size(data |> max_by(&byte_size/1))) / sample_size |> Float.ceil |> trunc
