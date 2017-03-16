@@ -4,6 +4,15 @@ defmodule Membrane.Element.AudioMixer.AlignerOptions do
 end
 
 defmodule Membrane.Element.AudioMixer.Aligner do
+  @moduledoc """
+  This module (used by Mixer) collects data from multiple (currently three)
+  paths, and every chunk_time forwards it through the sink. If some samples do
+  not arrive on time, buffer is sent without them, and they are omitted when they
+  finally arrive. If all paths lack samples, remaining_samples_cnt is the number
+  of lacking samples in the longest path, otherwise it is set to 0. Sent data
+  is a map consisting of list of paths (binaries) and remaining_samples_cnt.
+  Sent paths may contain incomplete samples, which need to be cut off.
+  """
 
   import Enum
   import Membrane.Helper.Enum
