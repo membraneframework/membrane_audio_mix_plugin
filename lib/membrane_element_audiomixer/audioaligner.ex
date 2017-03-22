@@ -20,8 +20,9 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   alias Membrane.Caps.Audio.Raw, as: Caps
   alias Membrane.Element.AudioMixer.AlignerOptions
   alias Array
+  alias Membrane.Time
 
-  @source_types [
+  @sink_types [
       %Caps{format: :f32le},
       %Caps{format: :s32le},
       %Caps{format: :s16le},
@@ -31,15 +32,15 @@ defmodule Membrane.Element.AudioMixer.Aligner do
       %Caps{format: :u8},
     ]
 
-  @source_pads %{sink0: 0, sink1: 1, sink2: 2}
-
-  def_known_source_pads %{
-    :sink0 => {:always, @source_types},
-    :sink1 => {:always, @source_types},
-    :sink2 => {:always, @source_types},
-  }
+  @sink_pads %{sink0: 0, sink1: 1, sink2: 2}
 
   def_known_sink_pads %{
+    :sink0 => {:always, @sink_types},
+    :sink1 => {:always, @sink_types},
+    :sink2 => {:always, @sink_types},
+  }
+
+  def_known_source_pads %{
     :source => {:always, [
       %Caps{format: :f32le},
       %Caps{format: :s32le},
@@ -51,29 +52,28 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     ]}
   }
 
-  @empty_queue @source_pads |> into(Array.new, fn _ -> <<>> end)
-  @empty_to_drop @source_pads |> into(Array.new, fn _ -> 0 end)
+  @empty_queue @sink_pads |> into(Array.new, fn _ -> <<>> end)
+  @empty_to_drop @sink_pads |> into(Array.new, fn _ -> 0 end)
 
-  @time_supplier Application.get_env :membrane_element_audiomixer, :time_supplier, System
 
   @doc false
-  def handle_prepare(%AlignerOptions{chunk_time: chunk_time}) do
+  def handle_init(%AlignerOptions{chunk_time: chunk_time}) do
     {:ok, queue: @empty_queue, chunk_time: chunk_time, chunk_size: Nil, to_drop: @empty_to_drop, timer: Nil, previous_tick: Nil}
   end
 
   @doc false
   def handle_play(%{chunk_time: chunk_time} = state) do
-    {:ok, timer} = :timer.send_interval(chunk_time/1_000_000 |> trunc, :tick)
-    %{state | timer: timer, previous_tick: @time_supplier.monotonic_time}
+    {:ok, timer} = :timer.send_interval(chunk_time/(1 |> Time.millisecond) |> trunc, :tick)
+    %{state | timer: timer, previous_tick: Time.native_monotonic_time}
   end
 
   @doc false
-  def handle_caps({:sink, %Caps{sample_rate: sample_rate, format: format} = caps}, state) do
+  def handle_caps(_sink, %Caps{sample_rate: sample_rate, format: format} = caps, state) do
     sample_size = Caps.format_to_sample_size format
     {
       :ok,
+      [{:caps, {:source, caps}}],
       %{state |
-        caps: caps,
         sample_size: sample_size,
         sample_rate: sample_rate,
         queue: @empty_queue,
@@ -83,8 +83,8 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   @doc false
-  def handle_buffer({sink, %Membrane.Buffer{payload: payload}}, %{queue: queue, to_drop: to_drop} = state) do
-    %{^sink => sink_no} = @source_pads
+  def handle_buffer(sink, %Membrane.Buffer{payload: payload}, _caps, %{queue: queue, to_drop: to_drop} = state) do
+    %{^sink => sink_no} = @sink_pads
     sink_to_drop = to_drop[sink_no]
     cut_payload = case payload do
       <<_::binary-size(sink_to_drop)-unit(8)>> <> r -> r
@@ -97,13 +97,13 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   defp current_chunk_size(current_tick, previous_tick, sample_size, sample_rate) do
-    duration = @time_supplier.convert_time_unit(current_tick - previous_tick, :native, :milliseconds)
-    trunc sample_size*duration*sample_rate/1000
+    duration = (current_tick - previous_tick) / Time.native_resolution
+    trunc sample_size*duration*sample_rate
   end
 
   @doc false
   def handle_other(:tick, %{queue: queue, to_drop: to_drop, sample_size: sample_size, sample_rate: sample_rate, previous_tick: previous_tick} = state) do
-    current_tick = @time_supplier.monotonic_time
+    current_tick = Time.native_monotonic_time
     chunk_size = current_chunk_size current_tick, previous_tick, sample_size, sample_rate
     {data, new_queue, new_to_drop} = zip(queue, to_drop)
       |> map(fn {data, to_drop} ->

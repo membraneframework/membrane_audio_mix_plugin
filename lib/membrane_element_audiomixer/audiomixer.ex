@@ -23,18 +23,6 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   alias Membrane.Caps.Audio.Raw, as: Caps
 
   def_known_source_pads %{
-    :sink => {:always, [
-      %Caps{format: :f32le},
-      %Caps{format: :s32le},
-      %Caps{format: :s16le},
-      %Caps{format: :u32le},
-      %Caps{format: :u16le},
-      %Caps{format: :s8},
-      %Caps{format: :u8},
-    ]}
-  }
-
-  def_known_sink_pads %{
     :source => {:always, [
       %Caps{format: :f32le},
       %Caps{format: :s32le},
@@ -46,9 +34,21 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     ]}
   }
 
+  def_known_sink_pads %{
+    :sink => {:always, [
+      %Caps{format: :f32le},
+      %Caps{format: :s32le},
+      %Caps{format: :s16le},
+      %Caps{format: :u32le},
+      %Caps{format: :u16le},
+      %Caps{format: :s8},
+      %Caps{format: :u8},
+    ]}
+  }
+
   @doc false
-  def handle_caps({:sink, caps}, state) do
-    {:ok, %{state | caps: caps}}
+  def handle_caps(:sink, caps, state) do
+    {:ok, [{:caps, {:source, caps}}], state}
   end
 
   @doc false
@@ -70,21 +70,21 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     end
   end
 
-  def mix(samples, mix_params, acc \\ 0)
-  def mix([], %{format: format, clipper: clipper}, acc) do
+  defp mix(samples, mix_params, acc \\ 0)
+  defp mix([], %{format: format, clipper: clipper}, acc) do
     {:ok, sample} = acc |> clipper.() |> Caps.value_to_sample(format)
     sample
   end
-  def mix([h|t], %{format: format} = mix_params, acc) do
+  defp mix([h|t], %{format: format} = mix_params, acc) do
     {:ok, value} = h |> Caps.sample_to_value(format)
     mix t, mix_params, acc + value
   end
-  def mix_params(format) do
+  defp mix_params(format) do
     %{format: format, clipper: clipper_factory(format)}
   end
 
   @doc false
-  def handle_buffer({:sink, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}, %{caps: %Caps{format: format}} = state) do
+  def handle_buffer(:sink, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}, %Caps{format: format} = caps, state) do
     {:ok, sample_size} = Caps.format_to_sample_size(format)
     payload = data
       |> map(&Bitstring.split! &1, sample_size)

@@ -9,9 +9,15 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
     def monotonic_time, do: 100
   end
 
+  let :now, do: 0.1
+
+  before do: allow(Membrane.Time).to accept(:native_monotonic_time, fn -> now end)
+  before do: allow(Membrane.Time).to accept(:native_resolution, fn -> 1 end)
+
   let :empty_queue, do: Array.from_list [<<>>,<<>>,<<>>]
   let :simple_queue, do: Array.from_list [<<1,2,3,4,5,6>>,<<7,8,9,10,11,12>>,<<13,14,15,16,17,18>>]
   let :empty_to_drop, do: Array.from_list [0, 0, 0]
+  let :caps, do: Nil
 
   describe ".handle_buffer/1" do
     let :buffer, do: %Membrane.Buffer{payload: payload}
@@ -21,7 +27,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
       let :queue, do: simple_queue
       let :payload, do: <<9,8,7>>
       it "should add buffer to queue" do
-        expect(described_module.handle_buffer({:sink0, buffer}, state)).to eq {:ok, [], %{state | queue: simple_queue |> Array.set(0, <<1,2,3,4,5,6,9,8,7>>)}}
+        expect(described_module.handle_buffer(:sink0, buffer, caps, state)).to eq {:ok, [], %{state | queue: simple_queue |> Array.set(0, <<1,2,3,4,5,6,9,8,7>>)}}
       end
     end
     context "if buffer needs to be cut" do
@@ -29,7 +35,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
       let :queue, do: empty_queue
       let :payload, do: <<9,8,7>>
       it "should cut buffer and add it to queue" do
-        expect(described_module.handle_buffer({:sink1, buffer}, state)).to eq {:ok, [], %{
+        expect(described_module.handle_buffer(:sink1, buffer, caps, state)).to eq {:ok, [], %{
             state | queue: queue |> Array.set(1, <<8,7>>), to_drop: empty_to_drop
           }}
       end
@@ -37,13 +43,13 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
   end
 
   describe ".handle_other/1" do
-    let :state, do: %{queue: queue, sample_rate: 1000, sample_size: 3, previous_tick: 98, to_drop: to_drop}
+    let :state, do: %{queue: queue, sample_rate: 1000, sample_size: 3, previous_tick: 0.098, to_drop: to_drop}
     let :to_drop, do: empty_to_drop
     defp handle_other_ok_result([data: data, remaining_samples_cnt: remaining_samples_cnt, state: state]) do
       {
         :ok,
         [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}}],
-        %{state | previous_tick: 100}
+        %{state | previous_tick: now}
       }
     end
 
