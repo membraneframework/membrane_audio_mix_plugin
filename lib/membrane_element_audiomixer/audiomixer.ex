@@ -3,7 +3,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   This element mixes audio paths (all in the same format, with the same amount
   of channels and sample rate) received from audioaligner
   (Membrane.Element.AudioMixer.Aligner), and sends resulting single path forwards
-  through the sink, in the format mixed paths are encoded in. If overflow
+  through the source, in the format mixed paths are encoded in. If overflow
   happens during mixing, it is being clipped to the max value of sample in this
   format.
 
@@ -12,7 +12,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   incomplete samples, they are cut off. Remaining_samples_cnt is the smallest
   amount of samples that were not supplied on time to the aligner (considering
   single path). Mixer appends remaining_samples_cnt silent samples to the
-  resulting path before forwarding it to the sink.
+  resulting path before forwarding it to the source.
   """
 
   import Enum
