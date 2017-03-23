@@ -58,7 +58,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   @doc false
   def handle_init(%AlignerOptions{chunk_time: chunk_time}) do
-    {:ok, queue: @empty_queue, chunk_time: chunk_time, chunk_size: Nil, to_drop: @empty_to_drop, timer: Nil, previous_tick: Nil}
+    {:ok, queue: @empty_queue, chunk_time: chunk_time, to_drop: @empty_to_drop, timer: Nil, previous_tick: Nil}
   end
 
   @doc false
@@ -83,7 +83,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   @doc false
-  def handle_buffer(sink, %Membrane.Buffer{payload: payload}, _caps, %{queue: queue, to_drop: to_drop} = state) do
+  def handle_buffer(sink, _caps, %Membrane.Buffer{payload: payload}, %{queue: queue, to_drop: to_drop} = state) do
     %{^sink => sink_no} = @sink_pads
     sink_to_drop = to_drop[sink_no]
     cut_payload = case payload do
@@ -97,8 +97,8 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   defp current_chunk_size(current_tick, previous_tick, sample_size, sample_rate) do
-    duration = (current_tick - previous_tick) / Time.native_resolution
-    trunc sample_size*duration*sample_rate
+    duration = current_tick - previous_tick
+    trunc sample_size*duration*sample_rate/Time.native_resolution
   end
 
   @doc false

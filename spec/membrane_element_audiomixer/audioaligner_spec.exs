@@ -4,11 +4,6 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
   import Enum
   alias Array
 
-  defmodule FakeTimeSupplier do
-    def convert_time_unit(time, _, _), do: time
-    def monotonic_time, do: 100
-  end
-
   let :now, do: 0.1
 
   before do: allow(Membrane.Time).to accept(:native_monotonic_time, fn -> now end)
@@ -27,7 +22,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
       let :queue, do: simple_queue
       let :payload, do: <<9,8,7>>
       it "should add buffer to queue" do
-        expect(described_module.handle_buffer(:sink0, buffer, caps, state)).to eq {:ok, [], %{state | queue: simple_queue |> Array.set(0, <<1,2,3,4,5,6,9,8,7>>)}}
+        expect(described_module.handle_buffer(:sink0, caps, buffer, state)).to eq {:ok, [], %{state | queue: simple_queue |> Array.set(0, <<1,2,3,4,5,6,9,8,7>>)}}
       end
     end
     context "if buffer needs to be cut" do
@@ -35,7 +30,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
       let :queue, do: empty_queue
       let :payload, do: <<9,8,7>>
       it "should cut buffer and add it to queue" do
-        expect(described_module.handle_buffer(:sink1, buffer, caps, state)).to eq {:ok, [], %{
+        expect(described_module.handle_buffer(:sink1, caps, buffer, state)).to eq {:ok, [], %{
             state | queue: queue |> Array.set(1, <<8,7>>), to_drop: empty_to_drop
           }}
       end

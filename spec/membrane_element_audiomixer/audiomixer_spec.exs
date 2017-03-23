@@ -17,7 +17,7 @@ defmodule Membrane.Element.AudioMixer.MixerSpec do
       let :remaining_samples_cnt, do: 0
       let :data, do: [<<1, 0, 3, 0>>, <<2, 0, 4, 0>>]
       it "should properly sum chunks" do
-        expect(described_module.handle_buffer(:sink, buffer, caps, state)).to eq handle_buffer_ok_result [payload: <<3, 0, 7, 0>>, state: state]
+        expect(described_module.handle_buffer(:sink, caps, buffer, state)).to eq handle_buffer_ok_result [payload: <<3, 0, 7, 0>>, state: state]
       end
     end
     context "if lenghts of chunks differ" do
@@ -25,7 +25,7 @@ defmodule Membrane.Element.AudioMixer.MixerSpec do
       let :remaining_samples_cnt, do: 0
       let :data, do: [<<1, 0, 3, 0>>, <<2, 0, 4, 0, 5, 0>>]
       it "should sum adjacent samples and copy the rest" do
-        expect(described_module.handle_buffer(:sink, buffer, caps, state)).to eq handle_buffer_ok_result [payload: <<3, 0, 7, 0, 5, 0>>, state: state]
+        expect(described_module.handle_buffer(:sink, caps, buffer, state)).to eq handle_buffer_ok_result [payload: <<3, 0, 7, 0, 5, 0>>, state: state]
       end
     end
     context "if format is signed" do
@@ -34,13 +34,13 @@ defmodule Membrane.Element.AudioMixer.MixerSpec do
       context "and there is overflow" do
         let :data, do: [<<255, 127>>, <<1, 0>>]
         it "should cut value" do
-          expect(described_module.handle_buffer(:sink, buffer, caps, state)).to eq handle_buffer_ok_result [payload: <<255, 127>>, state: state]
+          expect(described_module.handle_buffer(:sink, caps, buffer, state)).to eq handle_buffer_ok_result [payload: <<255, 127>>, state: state]
         end
       end
       context "and there is underflow" do
         let :data, do: [<<0,128>>, <<255,255>>]
         it "should cut value" do
-          expect(described_module.handle_buffer(:sink, buffer, caps, state)).to eq handle_buffer_ok_result [payload: <<0, 128>>, state: state]
+          expect(described_module.handle_buffer(:sink, caps, buffer, state)).to eq handle_buffer_ok_result [payload: <<0, 128>>, state: state]
         end
       end
     end
@@ -50,7 +50,7 @@ defmodule Membrane.Element.AudioMixer.MixerSpec do
       let :data, do: [<<255, 255>>, <<1, 0>>]
       context "and there is overflow" do
         it "should cut value" do
-          expect(described_module.handle_buffer(:sink, buffer, caps, state)).to eq handle_buffer_ok_result [payload: <<255,255>>, state: state]
+          expect(described_module.handle_buffer(:sink, caps, buffer, state)).to eq handle_buffer_ok_result [payload: <<255,255>>, state: state]
         end
       end
     end
@@ -59,7 +59,7 @@ defmodule Membrane.Element.AudioMixer.MixerSpec do
       let :remaining_samples_cnt, do: 2
       let :data, do: [<<1, 0, 3, 0>>, <<2, 0, 4, 0>>]
       it "should add a remaining_samples_cnt-long silent part to the mixed data" do
-        expect(described_module.handle_buffer(:sink, buffer, caps, state)).to eq handle_buffer_ok_result [payload: <<3, 0, 7, 0, 0, 0, 0, 0>>, state: state]
+        expect(described_module.handle_buffer(:sink, caps, buffer, state)).to eq handle_buffer_ok_result [payload: <<3, 0, 7, 0, 0, 0, 0, 0>>, state: state]
       end
     end
     context "if some paths contain incomplete sample" do
@@ -68,13 +68,13 @@ defmodule Membrane.Element.AudioMixer.MixerSpec do
       context "and one of them is the longest path" do
         let :data, do: [<<1, 0, 3, 0, 5>>, <<2, 0, 4, 0>>, <<1,0,3>>]
         it "should skip incomplete samples" do
-          expect(described_module.handle_buffer(:sink, buffer, caps, state)).to eq handle_buffer_ok_result [payload: <<4, 0, 7, 0>>, state: state]
+          expect(described_module.handle_buffer(:sink, caps, buffer, state)).to eq handle_buffer_ok_result [payload: <<4, 0, 7, 0>>, state: state]
         end
       end
       context "and none of them is the longest path" do
         let :data, do: [<<1, 0, 3, 0>>, <<2>>, <<1, 0, 3>>]
         it "should skip incomplete samples" do
-          expect(described_module.handle_buffer(:sink, buffer, caps, state)).to eq handle_buffer_ok_result [payload: <<2, 0, 3, 0>>, state: state]
+          expect(described_module.handle_buffer(:sink, caps, buffer, state)).to eq handle_buffer_ok_result [payload: <<2, 0, 3, 0>>, state: state]
         end
       end
     end

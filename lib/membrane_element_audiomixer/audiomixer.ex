@@ -84,7 +84,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   end
 
   @doc false
-  def handle_buffer(:sink, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}, %Caps{format: format} = caps, state) do
+  def handle_buffer(:sink, %Caps{format: format} = caps, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}, state) do
     {:ok, sample_size} = Caps.format_to_sample_size(format)
     payload = data
       |> map(&Bitstring.split! &1, sample_size)
