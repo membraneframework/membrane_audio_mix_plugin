@@ -32,8 +32,6 @@ defmodule Membrane.Element.AudioMixer.Aligner do
       %Caps{format: :u8},
     ]
 
-  @sink_pads %{sink0: 0, sink1: 1, sink2: 2}
-
   def_known_sink_pads %{
     :sink0 => {:always, @sink_types},
     :sink1 => {:always, @sink_types},
@@ -58,7 +56,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   @doc false
   def handle_init(%AlignerOptions{chunk_time: chunk_time}) do
-    {:ok, queue: @empty_queue, chunk_time: chunk_time, to_drop: @empty_to_drop, timer: Nil, previous_tick: Nil}
+    {:ok, sink_pads: %{}, chunk_time: chunk_time, timer: Nil, previous_tick: Nil}
   end
 
   @doc false
@@ -83,17 +81,29 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   @doc false
-  def handle_buffer(sink, _caps, %Membrane.Buffer{payload: payload}, %{queue: queue, to_drop: to_drop} = state) do
-    %{^sink => sink_no} = @sink_pads
-    sink_to_drop = to_drop[sink_no]
+  def handle_other({:new_sink, sink, _caps}, %{sink_pads: sink_pads} = state) do
+    {:ok, [], %{state |
+      sink_pads: sink_pads |> Map.put(sink, %{queue: <<>>, to_drop: 0, first_play: true})
+    }}
+  end
+  #TODO: add sink removal handler
+
+  defp update_sink_payload %{queue: queue, to_drop: to_drop} = sink_data do
     cut_payload = case payload do
-      <<_::binary-size(sink_to_drop)-unit(8)>> <> r -> r
+      <<_::binary-size(to_drop)-unit(8)>> <> r -> r
       _ -> <<>>
     end
-    new_to_drop = to_drop |> Array.set(sink_no, Kernel.max(0, sink_to_drop - byte_size payload))
-    new_queue = queue |> Array.update(sink_no, &(&1 <> cut_payload))
+    %{ sink_data |
+      queue: queue <> cut_payload,
+      to_drop: Kernel.max(0, to_drop - byte_size payload)
+    }
+  end
 
-    {:ok, [], %{state | queue: new_queue, to_drop: new_to_drop}}
+  @doc false
+  def handle_other({sink, %Membrane.Buffer{payload: payload}}, %{sink_pads: sink_pads} = state) do
+    {:ok, [], %{state |
+      sink_pads: sink_pads |> Map.update!(sink, update_sink_payload)
+    }}
   end
 
   defp current_chunk_size(current_tick, previous_tick, sample_size, sample_rate) do
@@ -101,23 +111,27 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     trunc sample_size*duration*sample_rate/Time.native_resolution
   end
 
+  defp extract_sink_data({sink, %{first_play: true} = sink_data}, chunk_size), do: {<<>>, %{sink_data | first_play: false}}
+  defp extract_sink_data({sink, %{queue: queue, to_drop: to_drop} = sink_data}, chunk_size) do
+    case queue do
+      <<p::binary-size(chunk_size)-unit(8)>> <> r -> {p, {sink, %{sink_data | queue: r, to_drop: to_drop}}}
+      _ -> {queue, {sink, %{sink_data | queue: <<>>, to_drop: chunk_size - byte_size(queue)}}}
+    end
+  end
+
+
   @doc false
-  def handle_other(:tick, %{queue: queue, to_drop: to_drop, sample_size: sample_size, sample_rate: sample_rate, previous_tick: previous_tick} = state) do
+  def handle_other(:tick, %{sink_pads: sink_pads, sample_size: sample_size, sample_rate: sample_rate, previous_tick: previous_tick} = state) do
     current_tick = Time.native_monotonic_time
     chunk_size = current_chunk_size current_tick, previous_tick, sample_size, sample_rate
-    {data, new_queue, new_to_drop} = zip(queue, to_drop)
-      |> map(fn {data, to_drop} ->
-          case data do
-            <<p::binary-size(chunk_size)-unit(8)>> <> r -> {p, r, to_drop}
-            _ -> {data, <<>>, chunk_size - byte_size(data)}
-          end
-        end)
-      |> unzip!(3)
-      |> case do {p, q, d} -> {p, q |> into(Array.new), d |> into(Array.new)} end
+    {data, sink_pads} = sink_pads
+      |> map(&extract_sink_data &1, chunk_size)
+      |> unzip
+      |> case do {d, s} -> {d, s |> into(%{})} end
 
     remaining_samples_cnt = (chunk_size - byte_size(data |> max_by(&byte_size/1))) / sample_size |> Float.ceil |> trunc
 
-    {:ok, [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}}], %{state | queue: new_queue, to_drop: new_to_drop, previous_tick: current_tick}}
+    {:ok, [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}}], %{state | sink_pads: sink_pads, previous_tick: current_tick}}
   end
 
   @doc false
