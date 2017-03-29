@@ -61,6 +61,14 @@ defmodule Membrane.Element.AudioMixer.MixerSpec do
       it "should add a remaining_samples_cnt-long silent part to the mixed data" do
         expect(described_module.handle_buffer(:sink, caps, buffer, state)).to eq handle_buffer_ok_result [payload: <<3, 0, 7, 0, 0, 0, 0, 0>>, state: state]
       end
+      context "and data is an empty list" do
+        let :format, do: :s16le
+        let :remaining_samples_cnt, do: 3
+        let :data, do: []
+        it "should produce silence in amount of remaining_samples" do
+          expect(described_module.handle_buffer(:sink, caps, buffer, state)).to eq handle_buffer_ok_result [payload: <<0, 0, 0, 0, 0, 0>>, state: state]
+        end
+      end
     end
     context "if some paths contain incomplete sample" do
       let :format, do: :s16le

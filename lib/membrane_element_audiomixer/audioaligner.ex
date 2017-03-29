@@ -108,7 +108,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   defp extract_sink_data {sink, %{first_play: true} = sink_data}, chunk_size do
-     {<<>>, %{sink_data | first_play: false}}
+     {Nil, {sink, %{sink_data | first_play: false}}}
   end
   defp extract_sink_data {sink, %{queue: queue, to_drop: to_drop} = sink_data}, chunk_size do
     case queue do
@@ -125,9 +125,9 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     {data, sink_data} = sink_data
       |> map(&extract_sink_data &1, chunk_size)
       |> unzip
-      |> case do {d, s} -> {d, s |> into(%{})} end
+      |> case do {d, s} -> {d |> filter(& &1 != Nil), s |> into(%{}) } end
 
-    remaining_samples_cnt = (chunk_size - byte_size(data |> max_by(&byte_size/1))) / sample_size |> Float.ceil |> trunc
+    remaining_samples_cnt = (chunk_size - byte_size(data |> max_by(&byte_size/1, fn -> <<>> end))) / sample_size |> Float.ceil |> trunc
 
     {:ok, [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}}], %{state | sink_data: sink_data, previous_tick: current_tick}}
   end

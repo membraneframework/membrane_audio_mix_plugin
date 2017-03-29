@@ -21,10 +21,6 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
   let :simple_sink_data, do: [{<<1,2,3,4,5,6>>, 0},{<<7,8,9,10,11,12>>, 0},{<<13,14,15,16,17,18>>, 0}] |> to_sink_data
   let :caps, do: Nil
 
-  describe ".handle_buffer/1" do
-
-  end
-
   describe ".handle_other/1" do
     context "{sink, Membrane.Buffer}" do
       let :buffer, do: %Membrane.Buffer{payload: payload}
@@ -50,7 +46,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
     end
     context ":tick" do
       let :state, do: %{sink_data: sink_data, sample_rate: 1000, sample_size: 3, previous_tick: 0.098}
-      defp handle_other_ok_result([data: data, remaining_samples_cnt: remaining_samples_cnt, state: state]) do
+      defp handle_other_ok_result [data: data, remaining_samples_cnt: remaining_samples_cnt, state: state] do
         {
           :ok,
           [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}}],
@@ -59,57 +55,77 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
       end
 
       defp queues sink_data do
-        sink_data |> Map.values |> map(fn %{queue: q} -> q end)
+        sink_data |> Map.values |> filter(fn %{first_play: fp} -> !fp end) |> map(fn %{queue: q} -> q end)
       end
 
       context "in usual case" do
         let :sink_data, do: simple_sink_data
         it "should parse and send queue as a buffer" do
-          expect(described_module.handle_other :tick, state).to eq handle_other_ok_result([
+          expect(described_module.handle_other :tick, state).to eq handle_other_ok_result [
             data: sink_data |> queues,
             remaining_samples_cnt: 0,
-            state: %{state | sink_data: empty_sink_data}]
-          )
+            state: %{state | sink_data: empty_sink_data}
+          ]
+        end
+      end
+      context "if there are no sinks" do
+        let :sink_data, do: [] |> to_sink_data
+        it "should send an empty payload, and set remaining_samples_cnt to amount of samples corresponding entire time gap" do
+          expect(described_module.handle_other :tick, state).to eq handle_other_ok_result [
+            data: sink_data |> queues,
+            remaining_samples_cnt: 2,
+            state: %{state | sink_data: sink_data}
+          ]
+        end
+      end
+      context "if current tick is for some sinks the first one since connecting" do
+        let :sink_data, do: simple_sink_data |> Map.update!(1, &%{&1 | first_play: true})
+        it "should skip them while constructing payload, preserve their queue, do not update to_drop and set first_play to false" do
+          expect(described_module.handle_other :tick, state).to eq handle_other_ok_result [
+            data: sink_data |> queues,
+            remaining_samples_cnt: 0,
+            state: %{state | sink_data: empty_sink_data |> Map.update!(1, &%{&1 | queue: simple_sink_data[1].queue, first_play: false})}
+          ]
         end
       end
       context "if sizes of queues differ" do
         context "and one of them lacks data" do
           let :sink_data, do: simple_sink_data |> Map.update!(1, &%{&1 | queue: <<1,2,3>>})
           it "should forward queue and update to_drop" do
-            expect(described_module.handle_other :tick, state).to eq handle_other_ok_result([
+            expect(described_module.handle_other :tick, state).to eq handle_other_ok_result [
               data: sink_data |> queues,
               remaining_samples_cnt: 0,
               state: %{state | sink_data: empty_sink_data |> Map.update!(1, &%{&1 | to_drop: 3})}
-            ])
+            ]
           end
         end
         context "and one of them excesses data" do
           let :sink_data, do: simple_sink_data |> Map.update!(1, &%{&1 | queue: <<1,2,3,4,5,6,7,8,9>>})
           it "should forward queue and store excess in the new queue" do
-            expect(described_module.handle_other :tick, state).to eq handle_other_ok_result([
+            expect(described_module.handle_other :tick, state).to eq handle_other_ok_result [
               data: simple_sink_data |> Map.update!(1, &%{&1 | queue: <<1,2,3,4,5,6>>}) |> queues,
               remaining_samples_cnt: 0,
               state: %{state | sink_data: empty_sink_data |> Map.update!(1, &%{&1 | queue: <<7,8,9>>})}
-            ])
+            ]
           end
         end
         context "and all of them lack data" do
           let :sink_data, do: [{<<1,2,3>>, 0}, {<<1,2,3>>, 0}, {<<>>, 0}] |> to_sink_data
           it "should forward queue, update to_drop and set remaining_samples_cnt" do
-            expect(described_module.handle_other :tick, state).to eq handle_other_ok_result([
+            expect(described_module.handle_other :tick, state).to eq handle_other_ok_result [
               data: sink_data |> queues,
               remaining_samples_cnt: 1,
               state: %{state | sink_data: [{<<>>, 3}, {<<>>, 3}, {<<>>, 6}] |> to_sink_data}
-            ])
+            ]
           end
           context "and size of longest path is not an integer multiplication of sample size" do
             let :sink_data, do: empty_sink_data |> Map.update!(1, &%{&1 | queue: <<1,2,3,4,5>>})
             it "should forward queue, update to_drop and set remaining_samples_cnt skipping incomplete sample" do
-              expect(described_module.handle_other :tick, state).to eq handle_other_ok_result([
+              expect(described_module.handle_other :tick, state).to eq handle_other_ok_result [
                 data: sink_data |> queues,
                 remaining_samples_cnt: 1,
                 state: %{state | sink_data: [{<<>>, 6}, {<<>>, 1}, {<<>>, 6}] |> to_sink_data}
-              ])
+              ]
             end
           end
         end
