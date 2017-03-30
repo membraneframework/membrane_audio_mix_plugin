@@ -3,6 +3,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
   use Bitwise
   import Enum
   alias Array
+  alias Membrane.Caps.Audio.Raw, as: Caps
 
   let :now, do: 0.1
 
@@ -45,7 +46,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
       end
     end
     context ":tick" do
-      let :state, do: %{sink_data: sink_data, sample_rate: 1000, sample_size: 3, previous_tick: 0.098}
+      let :state, do: %{sink_data: sink_data, caps: %Caps{sample_rate: 1000, format: :s24le}, previous_tick: 0.098}
       defp handle_other_ok_result [data: data, remaining_samples_cnt: remaining_samples_cnt, state: state] do
         {
           :ok,

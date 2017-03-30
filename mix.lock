@@ -3,6 +3,6 @@
   "espec": {:hex, :espec, "1.1.2", "d1cf60ee8f6fb8b0f1593097958762f870949238b0aa15788201728cb6e672dd", [:mix], [{:meck, "~> 0.8.4", [hex: :meck, optional: false]}]},
   "ex_doc": {:hex, :ex_doc, "0.15.0", "e73333785eef3488cf9144a6e847d3d647e67d02bd6fdac500687854dd5c599f", [:mix], [{:earmark, "~> 1.1", [hex: :earmark, optional: false]}]},
   "meck": {:hex, :meck, "0.8.4", "59ca1cd971372aa223138efcf9b29475bde299e1953046a0c727184790ab1520", [:make, :rebar], []},
-  "membrane_caps_audio_raw": {:git, "git@github.com:membraneframework/membrane-caps-audio-raw.git", "2b9e42f787dc272e72755d6fbce7d4315d3a33eb", []},
+  "membrane_caps_audio_raw": {:git, "git@github.com:membraneframework/membrane-caps-audio-raw.git", "4b5f569dd680f2cfd5d8b5c7069b5d0d23cff5f8", [branch: "feature/s24le"]},
   "membrane_common_c": {:git, "git@github.com:membraneframework/membrane-common-c.git", "dcf201254913ef9c8afbd93e6bf26cf629b961bd", []},
   "membrane_core": {:git, "git@github.com:membraneframework/membrane-core.git", "bd24fb01f4a55dedb279ded7ec0b968ce85b6a09", []}}

@@ -53,7 +53,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   @doc false
   def handle_init %AlignerOptions{chunk_time: chunk_time} do
     #TODO: here only init sample size and sample rate to Nil, set them up in handle_caps / handle_new_sink
-    {:ok, %{sink_data: %{}, chunk_time: chunk_time, timer: Nil, previous_tick: Nil, sample_size: 2, sample_rate: 44100}}
+    {:ok, %{sink_data: %{}, chunk_time: chunk_time, timer: Nil, previous_tick: Nil, caps: Nil}}
   end
 
   @doc false
@@ -76,9 +76,10 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   # end
 
   @doc false
-  def handle_other {:new_sink, sink, _caps}, %{sink_data: sink_data} = state do
-    # TODO: handle and verify caps
+  def handle_other {:new_sink, sink, caps}, %{sink_data: sink_data} = state do
+    # TODO: verify caps
     {:ok, [], %{state |
+      caps: caps,
       sink_data: sink_data |> Map.put(sink, %{queue: <<>>, to_drop: 0, first_play: true})
     }}
   end
@@ -119,7 +120,8 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
 
   @doc false
-  def handle_other :tick, %{sink_data: sink_data, sample_size: sample_size, sample_rate: sample_rate, previous_tick: previous_tick} = state do
+  def handle_other :tick, %{sink_data: sink_data, caps: %Caps{sample_rate: sample_rate, format: format} = caps, previous_tick: previous_tick} = state do
+    {:ok, sample_size} = Caps.format_to_sample_size format
     current_tick = Time.native_monotonic_time
     chunk_size = current_chunk_size current_tick, previous_tick, sample_size, sample_rate
     {data, sink_data} = sink_data
