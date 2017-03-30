@@ -1,6 +1,7 @@
 defmodule Membrane.Element.AudioMixer.AlignerOptions do
   defstruct \
-    chunk_time: nil
+    chunk_time: nil,
+    buffer_reserve_factor: 0.5
 end
 
 defmodule Membrane.Element.AudioMixer.Aligner do
@@ -51,9 +52,8 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
 
   @doc false
-  def handle_init %AlignerOptions{chunk_time: chunk_time} do
-    #TODO: here only init sample size and sample rate to Nil, set them up in handle_caps / handle_new_sink
-    {:ok, %{sink_data: %{}, chunk_time: chunk_time, timer: Nil, previous_tick: Nil, caps: Nil}}
+  def handle_init %AlignerOptions{chunk_time: chunk_time, buffer_reserve_factor: buffer_reserve_factor} do
+    {:ok, %{sink_data: %{}, chunk_time: chunk_time, buffer_reserve_factor: buffer_reserve_factor, timer: Nil, previous_tick: Nil, caps: Nil}}
   end
 
   @doc false
@@ -108,10 +108,14 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     trunc sample_size*duration*sample_rate/Time.native_resolution
   end
 
-  defp extract_sink_data {sink, %{first_play: true} = sink_data}, chunk_size do
-     {Nil, {sink, %{sink_data | first_play: false}}}
+  defp extract_sink_data {sink, %{queue: queue, first_play: true} = sink_data}, chunk_size, buffer_reserve_factor do
+    if byte_size(queue) >= chunk_size * (1 + buffer_reserve_factor) do
+      extract_sink_data {sink, %{sink_data | first_play: false}}, chunk_size, buffer_reserve_factor
+    else
+      {Nil, {sink, sink_data}}
+    end
   end
-  defp extract_sink_data {sink, %{queue: queue, to_drop: to_drop} = sink_data}, chunk_size do
+  defp extract_sink_data {sink, %{queue: queue, to_drop: to_drop} = sink_data}, chunk_size, _buffer_reserve_factor do
     case queue do
       <<p::binary-size(chunk_size)-unit(8)>> <> r -> {p, {sink, %{sink_data | queue: r, to_drop: to_drop}}}
       _ -> {queue, {sink, %{sink_data | queue: <<>>, to_drop: chunk_size - byte_size(queue)}}}
@@ -120,12 +124,12 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
 
   @doc false
-  def handle_other :tick, %{sink_data: sink_data, caps: %Caps{sample_rate: sample_rate, format: format} = caps, previous_tick: previous_tick} = state do
+  def handle_other :tick, %{sink_data: sink_data, caps: %Caps{sample_rate: sample_rate, format: format} = caps, previous_tick: previous_tick, buffer_reserve_factor: buffer_reserve_factor} = state do
     {:ok, sample_size} = Caps.format_to_sample_size format
     current_tick = Time.native_monotonic_time
     chunk_size = current_chunk_size current_tick, previous_tick, sample_size, sample_rate
     {data, sink_data} = sink_data
-      |> map(&extract_sink_data &1, chunk_size)
+      |> map(&extract_sink_data &1, chunk_size, buffer_reserve_factor)
       |> unzip
       |> case do {d, s} -> {d |> filter(& &1 != Nil), s |> into(%{}) } end
 

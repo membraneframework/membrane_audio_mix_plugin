@@ -46,7 +46,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
       end
     end
     context ":tick" do
-      let :state, do: %{sink_data: sink_data, caps: %Caps{sample_rate: 1000, format: :s24le}, previous_tick: 0.098}
+      let :state, do: %{sink_data: sink_data, caps: %Caps{sample_rate: 1000, format: :s24le}, previous_tick: 0.098, buffer_reserve_factor: 0.5}
       defp handle_other_ok_result [data: data, remaining_samples_cnt: remaining_samples_cnt, state: state] do
         {
           :ok,
@@ -56,7 +56,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
       end
 
       defp queues sink_data do
-        sink_data |> Map.values |> filter(fn %{first_play: fp} -> !fp end) |> map(fn %{queue: q} -> q end)
+        sink_data |> Map.values |> map(fn %{queue: q} -> q end)
       end
 
       context "in usual case" do
@@ -79,13 +79,23 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
           ]
         end
       end
-      context "if current tick is for some sinks the first one since connecting" do
+      context "if some sinks have not received initial amount of data yet" do
         let :sink_data, do: simple_sink_data |> Map.update!(1, &%{&1 | first_play: true})
-        it "should skip them while constructing payload, preserve their queue, do not update to_drop and set first_play to false" do
+        it "should skip them while constructing payload, preserve their queue, and leave update to_drop and first_play unchanged" do
           expect(described_module.handle_other :tick, state).to eq handle_other_ok_result [
-            data: sink_data |> queues,
+            data: sink_data |> Map.delete(1) |> queues,
             remaining_samples_cnt: 0,
-            state: %{state | sink_data: empty_sink_data |> Map.update!(1, &%{&1 | queue: simple_sink_data[1].queue, first_play: false})}
+            state: %{state | sink_data: empty_sink_data |> Map.update!(1, &%{&1 | queue: simple_sink_data[1].queue, first_play: true})}
+          ]
+        end
+      end
+      context "if some sinks have just received initial amount of data" do
+        let :sink_data, do: simple_sink_data |> Map.update!(1, &%{&1 | queue: simple_sink_data[1].queue <> <<80, 81, 82>>, first_play: true})
+        it "should add their buffer to payload, excess to queue, leave to_drop unchanged and set first_play to false" do
+          expect(described_module.handle_other :tick, state).to eq handle_other_ok_result [
+            data: sink_data |> Map.update!(1, &%{&1 | queue: simple_sink_data[1].queue}) |> queues,
+            remaining_samples_cnt: 0,
+            state: %{state | sink_data: empty_sink_data |> Map.update!(1, &%{&1 | queue: <<80, 81, 82>>, first_play: false})}
           ]
         end
       end
