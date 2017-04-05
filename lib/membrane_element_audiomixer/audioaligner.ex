@@ -17,7 +17,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   import Enum
   import Membrane.Helper.Enum
-  use Membrane.Element.Base.Filter
+  use Membrane.Element.Base.Source
   alias Membrane.Caps.Audio.Raw, as: Caps
   alias Membrane.Element.AudioMixer.AlignerOptions
   alias Membrane.Time

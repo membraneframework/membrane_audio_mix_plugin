@@ -46,6 +46,8 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     ]}
   }
 
+  def handle_init(_), do: {:ok, Nil}
+
   @doc false
   def handle_caps(:sink, caps, state) do
     {:ok, [{:caps, {:source, caps}}], state}
