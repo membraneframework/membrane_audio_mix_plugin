@@ -59,7 +59,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   @doc false
   def handle_play %{chunk_time: chunk_time} = state do
     {:ok, timer} = :timer.send_interval(chunk_time/(1 |> Time.millisecond) |> trunc, :tick)
-    %{state | timer: timer, previous_tick: Time.native_monotonic_time}
+    {:ok, %{state | timer: timer, previous_tick: Time.native_monotonic_time}}
   end
 
   # @doc false
@@ -78,10 +78,12 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   @doc false
   def handle_other {:new_sink, sink, caps}, %{sink_data: sink_data} = state do
     # TODO: verify caps
-    {:ok, [], %{state |
+    commands = if sink_data |> empty? do [{:caps, {:source, caps}}] else [] end
+    state = %{state |
       caps: caps,
       sink_data: sink_data |> Map.put(sink, %{queue: <<>>, to_drop: 0, first_play: true})
-    }}
+    }
+    {:ok, commands, state}
   end
 
   def handle_other {:remove_sink, sink}, %{sink_data: sink_data, sinks_to_remove: sinks_to_remove} = state do
@@ -89,7 +91,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
       <<>> -> %{state | sink_data: sink_data |> Map.delete(sink)}
       _ -> %{state | sinks_to_remove: [sink | sinks_to_remove]}
     end
-    {:ok, [], new_state}
+    {:ok, new_state}
   end
 
   defp update_sink_data payload, %{queue: queue, to_drop: to_drop} = sink_data do
@@ -105,7 +107,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   @doc false
   def handle_other {sink, %Membrane.Buffer{payload: payload}}, %{sink_data: sink_data} = state do
-    {:ok, [], %{state |
+    {:ok, %{state |
       sink_data: sink_data |> Map.update!(sink, &(update_sink_data payload, &1))
     }}
   end

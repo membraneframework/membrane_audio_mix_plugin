@@ -31,7 +31,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
         let :payload, do: <<9,8,7>>
         it "should add buffer to queue" do
           expect(described_module.handle_other({0, buffer}, state)).to eq {
-            :ok, [], %{state | sink_data: simple_sink_data |> Map.update!(0, &%{&1 | queue: <<1,2,3,4,5,6,9,8,7>>})}
+            :ok, %{state | sink_data: simple_sink_data |> Map.update!(0, &%{&1 | queue: <<1,2,3,4,5,6,9,8,7>>})}
           }
         end
       end
@@ -39,7 +39,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
         let :sink_data, do: empty_sink_data |> Map.update!(1, &%{&1 | to_drop: 1})
         let :payload, do: <<9,8,7>>
         it "should cut buffer and add it to queue" do
-          expect(described_module.handle_other({1, buffer}, state)).to eq {:ok, [], %{
+          expect(described_module.handle_other({1, buffer}, state)).to eq {:ok, %{
               state | sink_data: empty_sink_data |> Map.update!(1, &%{&1 | queue: <<8,7>>})
             }}
         end
