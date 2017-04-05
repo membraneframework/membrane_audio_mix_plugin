@@ -46,7 +46,8 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
       end
     end
     context ":tick" do
-      let :state, do: %{sink_data: sink_data, caps: %Caps{sample_rate: 1000, format: :s24le}, previous_tick: 0.098, buffer_reserve_factor: 0.5}
+      let :state, do: %{sink_data: sink_data, sinks_to_remove: sinks_to_remove, caps: %Caps{sample_rate: 1000, format: :s24le}, previous_tick: 0.098, buffer_reserve_factor: 0.5}
+      let :sinks_to_remove, do: []
       defp handle_other_ok_result [data: data, remaining_samples_cnt: remaining_samples_cnt, state: state] do
         {
           :ok,
@@ -96,6 +97,17 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
             data: sink_data |> Map.update!(1, &%{&1 | queue: simple_sink_data[1].queue}) |> queues,
             remaining_samples_cnt: 0,
             state: %{state | sink_data: empty_sink_data |> Map.update!(1, &%{&1 | queue: <<80, 81, 82>>, first_play: false})}
+          ]
+        end
+      end
+      context "if there are some sinks to remove" do
+        let :sink_data, do: simple_sink_data
+        let :sinks_to_remove, do: [1]
+        it "should parse and send queue as a buffer" do
+          expect(described_module.handle_other :tick, state).to eq handle_other_ok_result [
+            data: sink_data |> queues,
+            remaining_samples_cnt: 0,
+            state: %{state | sink_data: empty_sink_data |> Map.delete(1), sinks_to_remove: []}
           ]
         end
       end

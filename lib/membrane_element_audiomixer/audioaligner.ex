@@ -53,7 +53,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   @doc false
   def handle_init %AlignerOptions{chunk_time: chunk_time, buffer_reserve_factor: buffer_reserve_factor} do
-    {:ok, %{sink_data: %{}, chunk_time: chunk_time, buffer_reserve_factor: buffer_reserve_factor, timer: Nil, previous_tick: Nil, caps: Nil}}
+    {:ok, %{sink_data: %{}, sinks_to_remove: [], chunk_time: chunk_time, buffer_reserve_factor: buffer_reserve_factor, timer: Nil, previous_tick: Nil, caps: Nil}}
   end
 
   @doc false
@@ -83,7 +83,14 @@ defmodule Membrane.Element.AudioMixer.Aligner do
       sink_data: sink_data |> Map.put(sink, %{queue: <<>>, to_drop: 0, first_play: true})
     }}
   end
-  #TODO: add sink removal handler
+
+  def handle_other {:remove_sink, sink}, %{sink_data: sink_data, sinks_to_remove: sinks_to_remove} = state do
+    new_state = case sink_data[sink].queue do
+      <<>> -> %{state | sink_data: sink_data |> Map.delete(sink)}
+      _ -> %{state | sinks_to_remove: [sink | sinks_to_remove]}
+    end
+    {:ok, [], new_state}
+  end
 
   defp update_sink_data payload, %{queue: queue, to_drop: to_drop} = sink_data do
     cut_payload = case payload do
@@ -124,7 +131,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
 
   @doc false
-  def handle_other :tick, %{sink_data: sink_data, caps: %Caps{sample_rate: sample_rate, format: format} = caps, previous_tick: previous_tick, buffer_reserve_factor: buffer_reserve_factor} = state do
+  def handle_other :tick, %{sink_data: sink_data, sinks_to_remove: sinks_to_remove, caps: %Caps{sample_rate: sample_rate, format: format} = caps, previous_tick: previous_tick, buffer_reserve_factor: buffer_reserve_factor} = state do
     {:ok, sample_size} = Caps.format_to_sample_size format
     current_tick = Time.native_monotonic_time
     chunk_size = current_chunk_size current_tick, previous_tick, sample_size, sample_rate
@@ -133,9 +140,12 @@ defmodule Membrane.Element.AudioMixer.Aligner do
       |> unzip
       |> case do {d, s} -> {d |> filter(& &1 != Nil), s |> into(%{}) } end
 
+    {sinks_to_remove_now, sinks_to_remove} = sinks_to_remove |> split_with(&sink_data[&1].queue == <<>>)
+    sink_data = sink_data |> Map.drop(sinks_to_remove_now)
+
     remaining_samples_cnt = (chunk_size - byte_size(data |> max_by(&byte_size/1, fn -> <<>> end))) / sample_size |> Float.ceil |> trunc
 
-    {:ok, [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}}], %{state | sink_data: sink_data, previous_tick: current_tick}}
+    {:ok, [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}}], %{state | sink_data: sink_data, sinks_to_remove: sinks_to_remove, previous_tick: current_tick}}
   end
 
   @doc false
