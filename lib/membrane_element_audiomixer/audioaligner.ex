@@ -56,10 +56,6 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     {:ok, %{sink_data: %{}, sinks_to_remove: [], chunk_time: chunk_time, buffer_reserve_factor: buffer_reserve_factor, timer: Nil, previous_tick: Nil, caps: Nil}}
   end
 
-  @doc false
-  def handle_play %{chunk_time: chunk_time} = state do
-
-  end
 
   # @doc false
   # def handle_caps(_sink, %Caps{sample_rate: sample_rate, format: format} = caps, state) do
@@ -156,11 +152,6 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     end
   end
 
-
-  def handle_other :tick, %{caps: Nil} = state do
-    #no caps, wait for them
-  end
-
   @doc false
   def handle_other :tick, %{sink_data: sink_data, sinks_to_remove: sinks_to_remove, caps: %Caps{sample_rate: sample_rate, format: format} = caps, previous_tick: previous_tick, buffer_reserve_factor: buffer_reserve_factor} = state do
     {:ok, sample_size} = Caps.format_to_sample_size format
@@ -181,7 +172,9 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   @doc false
   def handle_stop %{timer: timer} = state do
-    {:ok, :cancel} = :timer.cancel timer
+    if timer != Nil do
+      {:ok, :cancel} = :timer.cancel timer
+    end
     {:ok, %{state | timer: Nil, previous_tick: Nil}}
   end
 end
