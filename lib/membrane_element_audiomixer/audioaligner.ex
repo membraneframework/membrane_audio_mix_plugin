@@ -58,8 +58,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   @doc false
   def handle_play %{chunk_time: chunk_time} = state do
-    {:ok, timer} = :timer.send_interval(chunk_time/(1 |> Time.millisecond) |> trunc, :tick)
-    {:ok, %{state | timer: timer, previous_tick: Time.native_monotonic_time}}
+
   end
 
   # @doc false
@@ -75,15 +74,37 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   #   }
   # end
 
+
+
+  defp add_sink sink_data, sink do
+    sink_data |> Map.put(sink, %{queue: <<>>, to_drop: 0, first_play: true})
+  end
+
+  defp init_timer chunk_time do
+    {:ok, timer} = :timer.send_interval(chunk_time/(1 |> Time.millisecond) |> trunc, :tick)
+    timer
+  end
+
   @doc false
-  def handle_other {:new_sink, sink, caps}, %{sink_data: sink_data} = state do
-    # TODO: verify caps
-    commands = if sink_data |> empty? do [{:caps, {:source, caps}}] else [] end
-    state = %{state |
+  def handle_other {:new_sink, sink, Nil}, state do
+    {:error, "audioaligner does not accept Nil caps, received from sink #{inspect sink}", state}
+  end
+  @doc false
+  def handle_other({:new_sink, sink, caps}, %{sink_data: sink_data, caps: current_caps} = state) when caps == current_caps do
+    {:ok, %{state | sink_data: sink_data |> add_sink(sink)}}
+  end
+  @doc false
+  def handle_other({:new_sink, sink, caps}, %{sink_data: sink_data, caps: current_caps, chunk_time: chunk_time, timer: timer} = state)
+  when sink_data == %{} do
+    {:ok, [{:caps, {:source, caps}}], %{state |
       caps: caps,
-      sink_data: sink_data |> Map.put(sink, %{queue: <<>>, to_drop: 0, first_play: true})
-    }
-    {:ok, commands, state}
+      sink_data: sink_data |> add_sink(sink),
+      timer: if timer == Nil do init_timer chunk_time else timer end
+    }}
+  end
+  @doc false
+  def handle_other {:new_sink, sink, caps}, state do
+    {:error, "audioaligner received incompatible caps #{inspect caps} from sink #{inspect sink}", state}
   end
 
   def handle_other {:remove_sink, sink}, %{sink_data: sink_data, sinks_to_remove: sinks_to_remove} = state do
@@ -107,9 +128,13 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   @doc false
   def handle_other {sink, %Membrane.Buffer{payload: payload}}, %{sink_data: sink_data} = state do
-    {:ok, %{state |
-      sink_data: sink_data |> Map.update!(sink, &(update_sink_data payload, &1))
-    }}
+    if sink_data |> Map.has_key?(sink) do
+      {:ok, %{state |
+        sink_data: sink_data |> Map.update!(sink, &(update_sink_data payload, &1))
+      }}
+    else
+      {:error, "audioaligner has not recogized sink #{inspect sink}", state}
+    end
   end
 
   defp current_chunk_size current_tick, previous_tick, sample_size, sample_rate do
@@ -131,6 +156,10 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     end
   end
 
+
+  def handle_other :tick, %{caps: Nil} = state do
+    #no caps, wait for them
+  end
 
   @doc false
   def handle_other :tick, %{sink_data: sink_data, sinks_to_remove: sinks_to_remove, caps: %Caps{sample_rate: sample_rate, format: format} = caps, previous_tick: previous_tick, buffer_reserve_factor: buffer_reserve_factor} = state do

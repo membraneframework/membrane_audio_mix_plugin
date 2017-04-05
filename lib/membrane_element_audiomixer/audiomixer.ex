@@ -85,6 +85,10 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     %{format: format, clipper: clipper_factory(format)}
   end
 
+  def handle_buffer(:sink, Nil, state) do
+    {:error, "audiomixer does not accept nil caps", state}
+  end
+
   @doc false
   def handle_buffer(:sink, %Caps{format: format} = caps, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}, state) do
     {:ok, sample_size} = Caps.format_to_sample_size(format)
