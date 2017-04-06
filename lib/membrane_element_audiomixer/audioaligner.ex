@@ -99,7 +99,8 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     {:ok, [{:caps, {:source, caps}}], %{state |
       caps: caps,
       sink_data: sink_data |> add_sink(sink),
-      timer: if timer == Nil do init_timer chunk_time else timer end
+      timer: if timer == Nil do init_timer chunk_time else timer end,
+      previous_tick: Time.native_monotonic_time,
     }}
   end
   @doc false
