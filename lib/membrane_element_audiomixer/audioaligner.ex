@@ -84,17 +84,18 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   @doc false
   def handle_other {:new_sink, sink, Nil}, state do
-    {:error, "audioaligner does not accept Nil caps, received from sink #{inspect sink}", state}
+    warn "audioaligner does not accept Nil caps, received from sink #{inspect sink}"
+    {:error, :aligner_nil_caps, state}
   end
   @doc false
   def handle_other({:new_sink, sink, caps}, %{sink_data: sink_data, caps: current_caps} = state) when caps == current_caps do
-    info "aligner: new sink: #{sink}"
+    debug "aligner: new sink: #{sink}"
     {:ok, %{state | sink_data: sink_data |> add_sink(sink)}}
   end
   @doc false
   def handle_other({:new_sink, sink, caps}, %{sink_data: sink_data, caps: current_caps, chunk_time: chunk_time, timer: timer} = state)
   when sink_data == %{} do
-    info "aligner: new sink: #{inspect sink}, setting caps to #{inspect caps}"
+    debug "aligner: new sink: #{inspect sink}, setting caps to #{inspect caps}"
     {:ok, [{:caps, {:source, caps}}], %{state |
       caps: caps,
       sink_data: sink_data |> add_sink(sink),
@@ -103,11 +104,12 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
   @doc false
   def handle_other {:new_sink, sink, caps}, state do
-    {:error, "audioaligner received incompatible caps #{inspect caps} from sink #{inspect sink}", state}
+    warn "audioaligner received incompatible caps #{inspect caps} from sink #{inspect sink}"
+    {:error, :aligner_incompatible_caps, state}
   end
 
   def handle_other {:remove_sink, sink}, %{sink_data: sink_data, sinks_to_remove: sinks_to_remove} = state do
-    info "aligner: removing sink: #{inspect sink}"
+    debug "aligner: removing sink: #{inspect sink}"
     new_state = case sink_data[sink].queue do
       <<>> -> %{state | sink_data: sink_data |> Map.delete(sink)}
       _ -> %{state | sinks_to_remove: [sink | sinks_to_remove]}
@@ -128,13 +130,14 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   @doc false
   def handle_other {sink, %Membrane.Buffer{payload: payload}}, %{sink_data: sink_data} = state do
-    info "aligner: received buffer from sink: #{inspect sink}, payload: #{inspect payload}"
+    debug "aligner: received buffer from sink: #{inspect sink}, payload: #{inspect payload}"
     if sink_data |> Map.has_key?(sink) do
       {:ok, %{state |
         sink_data: sink_data |> Map.update!(sink, &(update_sink_data payload, &1))
       }}
     else
-      {:error, "audioaligner has not recogized sink #{inspect sink}", state}
+      warn "audioaligner has not recogized sink #{inspect sink}"
+      {:error, :aligner_sink_not_recognized, state}
     end
   end
 
@@ -172,7 +175,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
     remaining_samples_cnt = (chunk_size - byte_size(data |> max_by(&byte_size/1, fn -> <<>> end))) / sample_size |> Float.ceil |> trunc
 
-    info "aligner: forwarding buffer #{inspect data}"
+    debug "aligner: forwarding buffer #{inspect data}"
 
     {:ok, [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}}], %{state | sink_data: sink_data, sinks_to_remove: sinks_to_remove, previous_tick: current_tick}}
   end
