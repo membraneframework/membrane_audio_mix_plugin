@@ -144,20 +144,22 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   defp current_chunk_size current_tick, previous_tick, sample_size, sample_rate do
     duration = current_tick - previous_tick
-    trunc sample_size*duration*sample_rate/Time.native_resolution
+    chunk_size = trunc sample_size*duration*sample_rate/Time.native_resolution
+    (chunk_size |> div(sample_size)) * sample_size
   end
 
-  defp extract_sink_data {sink, %{queue: queue, first_play: true} = sink_data}, chunk_size, buffer_reserve_factor do
+  defp extract_sink_data {sink, %{queue: queue, first_play: true} = sink_data}, chunk_size, buffer_reserve_factor, sample_size do
     if byte_size(queue) >= chunk_size * (1 + buffer_reserve_factor) do
-      extract_sink_data {sink, %{sink_data | first_play: false}}, chunk_size, buffer_reserve_factor
+      extract_sink_data {sink, %{sink_data | first_play: false}}, chunk_size, buffer_reserve_factor, sample_size
     else
       {Nil, {sink, sink_data}}
     end
   end
-  defp extract_sink_data {sink, %{queue: queue, to_drop: to_drop} = sink_data}, chunk_size, _buffer_reserve_factor do
+  defp extract_sink_data {sink, %{queue: queue, to_drop: to_drop} = sink_data}, chunk_size, _buffer_reserve_factor, sample_size do
+    queue_integral_part_size = (queue |> byte_size |> div(sample_size))*sample_size
     case queue do
       <<p::binary-size(chunk_size)-unit(8)>> <> r -> {p, {sink, %{sink_data | queue: r, to_drop: to_drop}}}
-      _ -> {queue, {sink, %{sink_data | queue: <<>>, to_drop: chunk_size - byte_size(queue)}}}
+      <<p::binary-size(queue_integral_part_size)-unit(8)>> <> r -> {p, {sink, %{sink_data | queue: r, to_drop: chunk_size - queue_integral_part_size}}}
     end
   end
 
@@ -167,14 +169,14 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     current_tick = Time.native_monotonic_time
     chunk_size = current_chunk_size current_tick, previous_tick, sample_size, sample_rate
     {data, sink_data} = sink_data
-      |> map(&extract_sink_data &1, chunk_size, buffer_reserve_factor)
+      |> map(&extract_sink_data &1, chunk_size, buffer_reserve_factor, sample_size)
       |> unzip
       |> case do {d, s} -> {d |> filter(& &1 != Nil), s |> into(%{}) } end
 
     {sinks_to_remove_now, sinks_to_remove} = sinks_to_remove |> split_with(&sink_data[&1].queue == <<>>)
     sink_data = sink_data |> Map.drop(sinks_to_remove_now)
 
-    remaining_samples_cnt = (chunk_size - byte_size(data |> max_by(&byte_size/1, fn -> <<>> end))) / sample_size |> Float.ceil |> trunc
+    remaining_samples_cnt = (chunk_size - byte_size(data |> max_by(&byte_size/1, fn -> <<>> end))) / sample_size |> trunc
 
     debug "aligner: forwarding buffer #{inspect data}"
 
