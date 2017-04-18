@@ -144,7 +144,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   defp current_chunk_size current_tick, previous_tick, sample_size, sample_rate do
     duration = current_tick - previous_tick
-    chunk_size = trunc sample_size*duration*sample_rate/Time.native_resolution
+    chunk_size = round sample_size*duration*sample_rate/Time.native_resolution
     (chunk_size |> div(sample_size)) * sample_size
   end
 
@@ -156,10 +156,9 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     end
   end
   defp extract_sink_data {sink, %{queue: queue, to_drop: to_drop} = sink_data}, chunk_size, _buffer_reserve_factor, sample_size do
-    queue_integral_part_size = (queue |> byte_size |> div(sample_size))*sample_size
     case queue do
       <<p::binary-size(chunk_size)-unit(8)>> <> r -> {p, {sink, %{sink_data | queue: r, to_drop: to_drop}}}
-      <<p::binary-size(queue_integral_part_size)-unit(8)>> <> r -> {p, {sink, %{sink_data | queue: r, to_drop: chunk_size - queue_integral_part_size}}}
+      _ -> {queue, {sink, %{sink_data | queue: <<>>, to_drop: chunk_size - byte_size(queue)}}}
     end
   end
 
@@ -176,7 +175,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     {sinks_to_remove_now, sinks_to_remove} = sinks_to_remove |> split_with(&sink_data[&1].queue == <<>>)
     sink_data = sink_data |> Map.drop(sinks_to_remove_now)
 
-    remaining_samples_cnt = (chunk_size - byte_size(data |> max_by(&byte_size/1, fn -> <<>> end))) / sample_size |> trunc
+    remaining_samples_cnt = (chunk_size - byte_size(data |> max_by(&byte_size/1, fn -> <<>> end))) / sample_size |> Float.ceil |> trunc
 
     debug "aligner: forwarding buffer #{inspect data}"
 
