@@ -89,7 +89,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
   @doc false
   def handle_other({:new_sink, sink, caps}, %{sink_data: sink_data, caps: current_caps} = state) when caps == current_caps do
-    debug "aligner: new sink: #{sink}"
+    debug "aligner: new sink: #{inspect sink}"
     {:ok, %{state | sink_data: sink_data |> add_sink(sink)}}
   end
   @doc false
