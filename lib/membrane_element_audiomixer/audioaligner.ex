@@ -142,10 +142,10 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     end
   end
 
-  defp current_chunk_size current_tick, previous_tick, sample_size, sample_rate do
-    duration = current_tick - previous_tick
-    chunk_size = round sample_size*duration*sample_rate/Time.native_resolution
-    (chunk_size |> div(sample_size)) * sample_size
+  defp current_chunk_size current_tick, previous_tick, %Caps{sample_rate: sample_rate, format: format, channels: channels} do
+    {:ok, sample_size} = Caps.format_to_sample_size format
+    chunk_samples = round sample_rate*(current_tick - previous_tick)/Time.native_resolution
+    chunk_samples * channels * sample_size
   end
 
   defp extract_sink_data {sink, %{queue: queue, first_play: true} = sink_data}, chunk_size, buffer_reserve_factor, sample_size do
@@ -163,10 +163,10 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   @doc false
-  def handle_other :tick, %{sink_data: sink_data, sinks_to_remove: sinks_to_remove, caps: %Caps{sample_rate: sample_rate, format: format} = caps, previous_tick: previous_tick, buffer_reserve_factor: buffer_reserve_factor} = state do
+  def handle_other :tick, %{sink_data: sink_data, sinks_to_remove: sinks_to_remove, caps: %Caps{format: format, sample_rate: sample_rate} = caps, previous_tick: previous_tick, buffer_reserve_factor: buffer_reserve_factor} = state do
     {:ok, sample_size} = Caps.format_to_sample_size format
     current_tick = Time.native_monotonic_time
-    chunk_size = current_chunk_size current_tick, previous_tick, sample_size, sample_rate
+    chunk_size = current_chunk_size current_tick, previous_tick, caps
     {data, sink_data} = sink_data
       |> map(&extract_sink_data &1, chunk_size, buffer_reserve_factor, sample_size)
       |> unzip
@@ -178,6 +178,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     remaining_samples_cnt = (chunk_size - byte_size(data |> max_by(&byte_size/1, fn -> <<>> end))) / sample_size |> Float.ceil |> trunc
 
     debug "aligner: forwarding buffer #{inspect data}"
+    debug "aligner: delays (in seconds): #{inspect sink_data |> into(%{},fn {k, v} -> {k, byte_size(v.queue)/sample_size/sample_rate} end)}"
 
     {:ok, [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}}], %{state | sink_data: sink_data, sinks_to_remove: sinks_to_remove, previous_tick: current_tick}}
   end

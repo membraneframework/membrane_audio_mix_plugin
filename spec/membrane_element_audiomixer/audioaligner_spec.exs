@@ -46,7 +46,7 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
       end
     end
     context ":tick" do
-      let :state, do: %{sink_data: sink_data, sinks_to_remove: sinks_to_remove, caps: %Caps{sample_rate: 1000, format: :s24le}, previous_tick: 0.098, buffer_reserve_factor: 0.5}
+      let :state, do: %{sink_data: sink_data, sinks_to_remove: sinks_to_remove, caps: %Caps{sample_rate: 1000, format: :s24le, channels: 1}, previous_tick: 0.098, buffer_reserve_factor: 0.5}
       let :sinks_to_remove, do: []
       defp handle_other_ok_result [data: data, remaining_samples_cnt: remaining_samples_cnt, state: state] do
         {
