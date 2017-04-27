@@ -54,7 +54,11 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   @doc false
   def handle_init %AlignerOptions{chunk_time: chunk_time, buffer_reserve_factor: buffer_reserve_factor} do
-    {:ok, %{sink_data: %{}, sinks_to_remove: [], chunk_time: chunk_time, buffer_reserve_factor: buffer_reserve_factor, timer: Nil, previous_tick: Nil, caps: Nil}}
+    if chunk_time < (1 |> Time.millisecond) do
+      {:error, "aligner: chunk time must be greater or equal to 1 millisecond"}
+    else
+      {:ok, %{sink_data: %{}, sinks_to_remove: [], chunk_time: chunk_time, buffer_reserve_factor: buffer_reserve_factor, timer: Nil, previous_tick: Nil, caps: Nil}}
+    end
   end
 
 
