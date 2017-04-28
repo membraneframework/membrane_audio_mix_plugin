@@ -123,6 +123,9 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   defp update_sink_data payload, %{queue: queue, to_drop: to_drop} = sink_data do
+    if to_drop > 0 do
+      warn "aligner: dropping #{Kernel.min to_drop, byte_size payload} of #{byte_size payload} received bytes, remaining to drop: #{Kernel.max 0, to_drop-byte_size payload} bytes"
+    end
     cut_payload = case payload do
       <<_::binary-size(to_drop)-unit(8)>> <> r -> r
       _ -> <<>>
@@ -162,7 +165,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   defp extract_sink_data {sink, %{queue: queue, to_drop: to_drop} = sink_data}, chunk_size, _buffer_reserve_factor, sample_size do
     case queue do
       <<p::binary-size(chunk_size)-unit(8)>> <> r -> {p, {sink, %{sink_data | queue: r, to_drop: to_drop}}}
-      _ -> {queue, {sink, %{sink_data | queue: <<>>, to_drop: chunk_size - byte_size(queue)}}}
+      _ -> {queue, {sink, %{sink_data | queue: <<>>, to_drop: to_drop + chunk_size - byte_size(queue)}}}
     end
   end
 
@@ -182,7 +185,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     remaining_samples_cnt = (chunk_size - byte_size(data |> max_by(&byte_size/1, fn -> <<>> end))) / sample_size |> Float.ceil |> trunc
 
     debug "aligner: forwarding buffer #{inspect data}"
-    debug "aligner: delays (in seconds): #{inspect sink_data |> into(%{},fn {k, v} -> {k, byte_size(v.queue)/sample_size/sample_rate} end)}"
+    debug "aligner: delays (in samples): #{inspect sink_data |> into(%{},fn {k, v} -> {k, v.to_drop/sample_size} end)}"
 
     {:ok, [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}}], %{state | sink_data: sink_data, sinks_to_remove: sinks_to_remove, previous_tick: current_tick}}
   end

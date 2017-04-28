@@ -112,16 +112,6 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
         end
       end
       context "if sizes of queues differ" do
-        context "and one of them lacks data" do
-          let :sink_data, do: simple_sink_data |> Map.update!(1, &%{&1 | queue: <<1,2,3>>})
-          it "should forward queue and update to_drop" do
-            expect(described_module.handle_other :tick, state).to eq handle_other_ok_result [
-              data: sink_data |> queues,
-              remaining_samples_cnt: 0,
-              state: %{state | sink_data: empty_sink_data |> Map.update!(1, &%{&1 | to_drop: 3})}
-            ]
-          end
-        end
         context "and one of them excesses data" do
           let :sink_data, do: simple_sink_data |> Map.update!(1, &%{&1 | queue: <<1,2,3,4,5,6,7,8,9>>})
           it "should forward queue and store excess in the new queue" do
@@ -129,6 +119,16 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
               data: simple_sink_data |> Map.update!(1, &%{&1 | queue: <<1,2,3,4,5,6>>}) |> queues,
               remaining_samples_cnt: 0,
               state: %{state | sink_data: empty_sink_data |> Map.update!(1, &%{&1 | queue: <<7,8,9>>})}
+            ]
+          end
+        end
+        context "and one of them lacks data" do
+          let :sink_data, do: simple_sink_data |> Map.update!(1, &%{&1 | queue: <<1,2,3>>, to_drop: 1})
+          it "should forward queue and update to_drop" do
+            expect(described_module.handle_other :tick, state).to eq handle_other_ok_result [
+              data: sink_data |> queues,
+              remaining_samples_cnt: 0,
+              state: %{state | sink_data: empty_sink_data |> Map.update!(1, &%{&1 | to_drop: 4})}
             ]
           end
         end
