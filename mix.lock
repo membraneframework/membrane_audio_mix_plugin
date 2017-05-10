@@ -5,4 +5,5 @@
   "meck": {:hex, :meck, "0.8.4", "59ca1cd971372aa223138efcf9b29475bde299e1953046a0c727184790ab1520", [:make, :rebar], []},
   "membrane_caps_audio_raw": {:git, "git@github.com:membraneframework/membrane-caps-audio-raw.git", "0968a5e95a7153b517bec3b2d1e0f1055b2a385c", []},
   "membrane_common_c": {:git, "git@github.com:membraneframework/membrane-common-c.git", "dcf201254913ef9c8afbd93e6bf26cf629b961bd", []},
-  "membrane_core": {:git, "git@github.com:membraneframework/membrane-core.git", "bd24fb01f4a55dedb279ded7ec0b968ce85b6a09", []}}
+  "membrane_core": {:git, "git@github.com:membraneframework/membrane-core.git", "bd24fb01f4a55dedb279ded7ec0b968ce85b6a09", []},
+  "qex": {:hex, :qex, "0.3.3", "d1c038de10308dcc489b9e2f50ebb019b2ffecb1753a4f1535f24b6b702491b0", [:mix], []}}
