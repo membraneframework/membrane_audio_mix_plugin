@@ -20,6 +20,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   use Membrane.Element.Base.Source
   alias Membrane.Caps.Audio.Raw, as: Caps
   alias Membrane.Element.AudioMixer.AlignerOptions
+  alias Membrane.Element.AudioMixer.IOQueue
   alias Membrane.Time
   use Membrane.Mixins.Log
 
@@ -57,7 +58,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     if chunk_time < (1 |> Time.millisecond) do
       {:error, "aligner: chunk time must be greater or equal to 1 millisecond"}
     else
-      {:ok, %{sink_data: %{}, sinks_to_remove: [], chunk_time: chunk_time, buffer_reserve_factor: buffer_reserve_factor, timer: Nil, previous_tick: Nil, caps: Nil}}
+      {:ok, %{sink_data: %{}, sinks_to_remove: [], chunk_time: chunk_time, buffer_reserve_factor: buffer_reserve_factor, timer: nil, previous_tick: nil, caps: nil}}
     end
   end
 
@@ -78,7 +79,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
 
   defp add_sink sink_data, sink do
-    sink_data |> Map.put(sink, %{queue: <<>>, to_drop: 0, first_play: true})
+    sink_data |> Map.put(sink, %{queue: IOQueue.new, to_drop: 0, first_play: true})
   end
 
   defp init_timer chunk_time do
@@ -87,8 +88,8 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   @doc false
-  def handle_other {:new_sink, sink, Nil}, state do
-    warn "audioaligner does not accept Nil caps, received from sink #{inspect sink}"
+  def handle_other {:new_sink, sink, nil}, state do
+    warn "audioaligner does not accept nil caps, received from sink #{inspect sink}"
     {:error, :aligner_nil_caps, state}
   end
   @doc false
@@ -103,7 +104,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     {:ok, [{:caps, {:source, caps}}], %{state |
       caps: caps,
       sink_data: sink_data |> add_sink(sink),
-      timer: if timer == Nil do init_timer chunk_time else timer end,
+      timer: if timer == nil do init_timer chunk_time else timer end,
       previous_tick: Time.native_monotonic_time,
     }}
   end
@@ -131,7 +132,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
       _ -> <<>>
     end
     %{ sink_data |
-      queue: queue <> cut_payload,
+      queue: queue |> IOQueue.push(cut_payload),
       to_drop: Kernel.max(0, to_drop - byte_size payload)
     }
   end
@@ -156,16 +157,18 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   end
 
   defp extract_sink_data {sink, %{queue: queue, first_play: true} = sink_data}, chunk_size, buffer_reserve_factor, sample_size do
-    if byte_size(queue) >= chunk_size * (1 + buffer_reserve_factor) do
+    if IOQueue.byte_length(queue) >= chunk_size * (1 + buffer_reserve_factor) do
       extract_sink_data {sink, %{sink_data | first_play: false}}, chunk_size, buffer_reserve_factor, sample_size
     else
-      {Nil, {sink, sink_data}}
+      {nil, {sink, sink_data}}
     end
   end
   defp extract_sink_data {sink, %{queue: queue, to_drop: to_drop} = sink_data}, chunk_size, _buffer_reserve_factor, sample_size do
-    case queue do
-      <<p::binary-size(chunk_size)-unit(8)>> <> r -> {p, {sink, %{sink_data | queue: r, to_drop: to_drop}}}
-      _ -> {queue, {sink, %{sink_data | queue: <<>>, to_drop: to_drop + chunk_size - byte_size(queue)}}}
+    case queue |> IOQueue.pop(chunk_size) do
+      {{:value, p}, r} -> {p, {sink, %{sink_data | queue: r}}}#, to_drop: to_drop}}}
+      {{:empty, p}, r} -> {p, {sink, %{sink_data | queue: r, to_drop: to_drop + chunk_size - IO.iodata_length(p)}}}
+      # <<p::binary-size(chunk_size)-unit(8)>> <> r -> {p, {sink, %{sink_data | queue: r, to_drop: to_drop}}}
+      # _ -> {queue, {sink, %{sink_data | queue: <<>>, to_drop: to_drop + chunk_size - byte_size(queue)}}}
     end
   end
 
@@ -174,27 +177,33 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     {:ok, sample_size} = Caps.format_to_sample_size format
     current_tick = Time.native_monotonic_time
     chunk_size = current_chunk_size current_tick, previous_tick, caps
-    {data, sink_data} = sink_data
+    {payload, sink_data} = sink_data
       |> map(&extract_sink_data &1, chunk_size, buffer_reserve_factor, sample_size)
       |> unzip
-      |> case do {d, s} -> {d |> filter(& &1 != Nil), s |> into(%{}) } end
+      |> case do {d, s} -> {d |> filter(& &1 != nil), s |> into(%{}) } end
 
-    {sinks_to_remove_now, sinks_to_remove} = sinks_to_remove |> split_with(&sink_data[&1].queue == <<>>)
+    {sinks_to_remove_now, sinks_to_remove} = sinks_to_remove |> split_with(&IOQueue.empty sink_data[&1].queue)
     sink_data = sink_data |> Map.drop(sinks_to_remove_now)
 
-    remaining_samples_cnt = (chunk_size - byte_size(data |> max_by(&byte_size/1, fn -> <<>> end))) / sample_size |> Float.ceil |> trunc
+    max_payload_length = payload |> Stream.map(&IO.iodata_length/1) |> Enum.max(fn -> 0 end)
+    remaining_samples_cnt = (chunk_size - max_payload_length) / sample_size |> Float.ceil |> trunc
+    # remaining_samples_cnt = (chunk_size - byte_size(payload |> max_by(&byte_size/1, fn -> <<>> end))) / sample_size |> Float.ceil |> trunc
 
-    debug "aligner: forwarding buffer #{inspect data}"
+    debug "aligner: forwarding buffer #{inspect payload}"
     debug "aligner: delays (in samples): #{inspect sink_data |> into(%{},fn {k, v} -> {k, v.to_drop/sample_size} end)}"
 
-    {:ok, [{:send, {:source, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}}}], %{state | sink_data: sink_data, sinks_to_remove: sinks_to_remove, previous_tick: current_tick}}
+    {:ok,
+      [{:send, {:source, %Membrane.Buffer{payload: payload}}}]
+      ++ if remaining_samples_cnt > 0 do [{:send, {:source, Membrane.Event.discontinuity remaining_samples_cnt}}] else [] end,
+      %{state | sink_data: sink_data, sinks_to_remove: sinks_to_remove, previous_tick: current_tick}
+    }
   end
 
   @doc false
   def handle_stop %{timer: timer} = state do
-    if timer != Nil do
+    if timer != nil do
       {:ok, :cancel} = :timer.cancel timer
     end
-    {:ok, %{state | timer: Nil, previous_tick: Nil}}
+    {:ok, %{state | timer: nil, previous_tick: nil}}
   end
 end

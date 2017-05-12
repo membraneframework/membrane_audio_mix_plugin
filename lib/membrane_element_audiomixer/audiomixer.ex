@@ -21,6 +21,8 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   use Bitwise
   use Membrane.Element.Base.Filter
   alias Membrane.Caps.Audio.Raw, as: Caps
+  alias Membrane.Event.Discontinuity.Payload, as: Discontinuity
+  alias Membrane.Buffer
 
   def_known_source_pads %{
     :source => {:always, [
@@ -46,7 +48,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     ]}
   }
 
-  def handle_init(_), do: {:ok, Nil}
+  def handle_init(_), do: {:ok, nil}
 
   @doc false
   def handle_caps(:sink, caps, state) do
@@ -85,21 +87,21 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     %{format: format, clipper: clipper_factory(format)}
   end
 
-  def handle_buffer(:sink, Nil, state) do
-    {:error, "audiomixer does not accept nil caps", state}
+  def handle_event(:sink, %Caps{format: format}, %Membrane.Event{payload: %Discontinuity{duration: duration}}, state) do
+    payload = fn -> Caps.sound_of_silence format end |> Stream.repeatedly |> Enum.take(duration) |> IO.iodata_to_binary
+    {:ok, [{:send, {:source, %Buffer{payload: payload}}}], state}
   end
 
   @doc false
-  def handle_buffer(:sink, %Caps{format: format} = caps, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}, state) do
+  def handle_buffer(:sink, %Caps{format: format} = caps, %Buffer{payload: payload}, state) do
     {:ok, sample_size} = Caps.format_to_sample_size(format)
-    payload = data
+    payload = payload
       |> map(&Bitstring.split! &1, sample_size)
       |> zip_longest
       |> map(&mix &1, mix_params format)
-      |> concat(0..remaining_samples_cnt |> drop(1) |> map(fn _ -> Caps.sound_of_silence format end))
       |> :binary.list_to_bin
 
-    {:ok, [{:send, {:source, %Membrane.Buffer{payload: payload}}}], state}
+    {:ok, [{:send, {:source, %Buffer{payload: payload}}}], state}
   end
 
   @doc false
