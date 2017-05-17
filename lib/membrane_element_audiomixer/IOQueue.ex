@@ -1,10 +1,12 @@
 defmodule Membrane.Element.AudioMixer.IOQueue do
   alias Membrane.Element.AudioMixer.IOQueue
 
-  defstruct \
-    q: Nil
+  @qe Qex
 
-  def new, do: %IOQueue{q: Qex.new}
+  defstruct \
+    q: nil
+
+  def new, do: %IOQueue{q: @qe.new}
   def new init do
     new |> push(init)
   end
@@ -13,18 +15,18 @@ defmodule Membrane.Element.AudioMixer.IOQueue do
     push q, [binary]
   end
   def push(%IOQueue{q: q}, iolist) when is_list iolist do
-    %IOQueue{q: q |> Qex.push(iolist)}
+    %IOQueue{q: q |> @qe.push(iolist)}
   end
 
   def push_front(q, binary) when is_binary binary do
     push_front q, [binary]
   end
   def push_front(%IOQueue{q: q}, iolist) when is_list iolist do
-    %IOQueue{q: q |> Qex.push_front(iolist)}
+    %IOQueue{q: q |> @qe.push_front(iolist)}
   end
 
   def pop %IOQueue{q: q} do
-    {r, new_q} = Qex.pop q
+    {r, new_q} = @qe.pop q
     {r, %IOQueue{q: new_q}}
   end
   def pop q, :binary do

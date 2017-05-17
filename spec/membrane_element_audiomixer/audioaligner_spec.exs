@@ -5,11 +5,13 @@ defmodule Membrane.Element.AudioMixer.AlignerSpec do
   alias Array
   alias Membrane.Caps.Audio.Raw, as: Caps
   alias Membrane.Element.AudioMixer.IOQueue
+  alias Membrane.Element.AudioMixer.ListQueue
 
   let :now, do: 0.1
 
   before do: allow(Membrane.Time).to accept(:native_monotonic_time, fn -> now end)
   before do: allow(Membrane.Time).to accept(:native_resolution, fn -> 1 end)
+  before do: allow(Qex).to accept(new: &ListQueue.new/0, new: &ListQueue.new/1, push: &ListQueue.push/2, push_front: &ListQueue.push_front/2, pop: &ListQueue.pop/1, pop_back: &ListQueue.pop_back/1) #FIXME: find better way to mock entire module
 
   defp to_sink_data list do
     list
