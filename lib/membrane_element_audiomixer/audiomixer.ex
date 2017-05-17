@@ -96,7 +96,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   def handle_buffer(:sink, %Caps{format: format} = caps, %Buffer{payload: payload}, state) do
     {:ok, sample_size} = Caps.format_to_sample_size(format)
     payload = payload
-      |> map(&Bitstring.split! &1, sample_size)
+      |> map(& &1 |> IO.iodata_to_binary |> Bitstring.split!(sample_size))
       |> zip_longest
       |> map(&mix &1, mix_params format)
       |> :binary.list_to_bin
