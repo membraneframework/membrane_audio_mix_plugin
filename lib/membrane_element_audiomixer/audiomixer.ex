@@ -15,8 +15,6 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   resulting path before forwarding it to the source.
   """
 
-  alias Membrane.Helper.Bitstring
-  use Bitwise
   use Membrane.Element.Base.Filter
   alias Membrane.Caps.Audio.Raw, as: Caps
   alias Membrane.Event.Discontinuity.Payload, as: Discontinuity
