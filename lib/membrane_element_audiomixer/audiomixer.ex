@@ -21,6 +21,8 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   use Bitwise
   use Membrane.Element.Base.Filter
   alias Membrane.Caps.Audio.Raw, as: Caps
+  alias Membrane.Time
+  use Membrane.Mixins.Log
 
   def_known_source_pads %{
     :source => {:always, [
@@ -92,12 +94,15 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   @doc false
   def handle_buffer(:sink, %Caps{format: format} = caps, %Membrane.Buffer{payload: %{data: data, remaining_samples_cnt: remaining_samples_cnt}}, state) do
     {:ok, sample_size} = Caps.format_to_sample_size(format)
+    t = Time.native_monotonic_time
     payload = data
       |> map(&Bitstring.split! &1, sample_size)
       |> zip_longest
       |> map(&mix &1, mix_params format)
       |> concat(0..remaining_samples_cnt |> drop(1) |> map(fn _ -> Caps.sound_of_silence format end))
       |> :binary.list_to_bin
+
+    debug "mixing time: #{(Time.native_monotonic_time - t) * 1000 / Time.native_resolution} ms"
 
     {:ok, [{:send, {:source, %Membrane.Buffer{payload: payload}}}], state}
   end
