@@ -15,8 +15,6 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   resulting path before forwarding it to the source.
   """
 
-  import Enum
-  import Membrane.Helper.Enum
   alias Membrane.Helper.Bitstring
   use Bitwise
   use Membrane.Element.Base.Filter
@@ -94,17 +92,29 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     {:ok, [{:send, {:source, %Buffer{payload: payload}}}], state}
   end
 
+  defp zip_longest_binary_by binaries, chunk_size, zipper, acc \\ [] do
+    {chunks, rests} = binaries
+      |> Enum.flat_map(fn
+        <<chunk::binary-size(chunk_size)>> <> rest -> [{chunk, rest}]
+        _ -> []
+      end)
+      |> Enum.unzip
+    case chunks do
+      [] -> acc |> Enum.reverse |> IO.iodata_to_binary
+      _ -> zip_longest_binary_by rests, chunk_size, zipper, [zipper.(chunks) | acc]
+    end
+  end
+
   @doc false
   def handle_buffer(:sink, %Caps{format: format} = caps, %Buffer{payload: payload}, state) do
     {:ok, sample_size} = Caps.format_to_sample_size(format)
     t = Time.native_monotonic_time
-    payload = payload
-      |> map(& &1 |> IO.iodata_to_binary |> Bitstring.split!(sample_size))
-      |> zip_longest
-      |> map(&mix &1, mix_params format)
-      |> :binary.list_to_bin
 
-    debug "mixing time: #{(Time.native_monotonic_time - t) * 1000 / Time.native_resolution} ms"
+    payload = payload
+      |> Enum.map(&IO.iodata_to_binary/1)
+      |> zip_longest_binary_by(sample_size, &mix(&1, mix_params format))
+
+    debug "mixing time: #{(Time.native_monotonic_time - t) * 1000 / Time.native_resolution} ms, payload size: #{byte_size payload}"
 
     {:ok, [{:send, {:source, %Buffer{payload: payload}}}], state}
   end
