@@ -174,6 +174,7 @@ defmodule Membrane.Element.AudioMixer.Aligner do
 
   @doc false
   def handle_other :tick, %{sink_data: sink_data, sinks_to_remove: sinks_to_remove, caps: %Caps{format: format, sample_rate: sample_rate} = caps, previous_tick: previous_tick, buffer_reserve_factor: buffer_reserve_factor} = state do
+    t = Time.native_monotonic_time
     {:ok, sample_size} = Caps.format_to_sample_size format
     current_tick = Time.native_monotonic_time
     chunk_size = current_chunk_size current_tick, previous_tick, caps
@@ -188,6 +189,8 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     max_payload_length = payload |> Stream.map(&IO.iodata_length/1) |> Enum.max(fn -> 0 end)
     remaining_samples_cnt = (chunk_size - max_payload_length) / sample_size |> Float.ceil |> trunc
     # remaining_samples_cnt = (chunk_size - byte_size(payload |> max_by(&byte_size/1, fn -> <<>> end))) / sample_size |> Float.ceil |> trunc
+
+    debug "aligning time: #{(Time.native_monotonic_time - t) * 1000 / Time.native_resolution} ms"
 
     debug "aligner: forwarding buffer #{inspect payload}"
     debug "aligner: delays (in samples): #{inspect sink_data |> into(%{},fn {k, v} -> {k, v.to_drop/sample_size} end)}"

@@ -23,6 +23,8 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   alias Membrane.Caps.Audio.Raw, as: Caps
   alias Membrane.Event.Discontinuity.Payload, as: Discontinuity
   alias Membrane.Buffer
+  alias Membrane.Time
+  use Membrane.Mixins.Log
 
   def_known_source_pads %{
     :source => {:always, [
@@ -95,11 +97,14 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   @doc false
   def handle_buffer(:sink, %Caps{format: format} = caps, %Buffer{payload: payload}, state) do
     {:ok, sample_size} = Caps.format_to_sample_size(format)
+    t = Time.native_monotonic_time
     payload = payload
       |> map(& &1 |> IO.iodata_to_binary |> Bitstring.split!(sample_size))
       |> zip_longest
       |> map(&mix &1, mix_params format)
       |> :binary.list_to_bin
+
+    debug "mixing time: #{(Time.native_monotonic_time - t) * 1000 / Time.native_resolution} ms"
 
     {:ok, [{:send, {:source, %Buffer{payload: payload}}}], state}
   end
