@@ -15,43 +15,10 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   resulting path before forwarding it to the source.
   """
 
-  use Membrane.Element.Base.Filter
-  alias Membrane.Caps.Audio.Raw, as: Caps
-  alias Membrane.Event.Discontinuity.Payload, as: Discontinuity
-  alias Membrane.Buffer
   alias Membrane.Time
+  alias Membrane.Caps.Audio.Raw, as: Caps
   use Membrane.Mixins.Log
-
-  def_known_source_pads %{
-    :source => {:always, [
-      %Caps{format: :f32le},
-      %Caps{format: :s32le},
-      %Caps{format: :s16le},
-      %Caps{format: :u32le},
-      %Caps{format: :u16le},
-      %Caps{format: :s8},
-      %Caps{format: :u8},
-    ]}
-  }
-
-  def_known_sink_pads %{
-    :sink => {:always, [
-      %Caps{format: :f32le},
-      %Caps{format: :s32le},
-      %Caps{format: :s16le},
-      %Caps{format: :u32le},
-      %Caps{format: :u16le},
-      %Caps{format: :s8},
-      %Caps{format: :u8},
-    ]}
-  }
-
-  def handle_init(_), do: {:ok, nil}
-
-  @doc false
-  def handle_caps(:sink, caps, state) do
-    {:ok, [{:caps, {:source, caps}}], state}
-  end
+  use Membrane.Helper
 
   @doc false
   defp clipper_factory(format) do
@@ -72,23 +39,18 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     end
   end
 
-  defp mix(samples, mix_params, acc \\ 0)
-  defp mix([], %{format: format, clipper: clipper}, acc) do
-    {:ok, sample} = acc |> clipper.() |> Caps.value_to_sample(format)
-    sample
+  defp do_mix(samples, mix_params, acc \\ 0)
+  defp do_mix([], %{format: format, clipper: clipper}, acc) do
+    acc |> clipper.() |> Caps.value_to_sample(format) ~> ({:ok, sample} -> sample)
   end
-  defp mix([h|t], %{format: format} = mix_params, acc) do
-    {:ok, value} = h |> Caps.sample_to_value(format)
-    mix t, mix_params, acc + value
+  defp do_mix([h|t], %{format: format} = mix_params, acc) do
+    do_mix t, mix_params, h |> Caps.sample_to_value(format) ~> ({:ok, v} -> acc + v)
   end
+
   defp mix_params(format) do
     %{format: format, clipper: clipper_factory(format)}
   end
 
-  def handle_event(:sink, %Caps{format: format}, %Membrane.Event{payload: %Discontinuity{duration: duration}}, state) do
-    payload = fn -> Caps.sound_of_silence format end |> Stream.repeatedly |> Enum.take(duration) |> IO.iodata_to_binary
-    {:ok, [{:send, {:source, %Buffer{payload: payload}}}], state}
-  end
 
   defp zip_longest_binary_by binaries, chunk_size, zipper, acc \\ [] do
     {chunks, rests} = binaries
@@ -104,21 +66,16 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   end
 
   @doc false
-  def handle_buffer(:sink, %Caps{format: format} = caps, %Buffer{payload: payload}, state) do
+  def mix(buffers, %Caps{format: format}) do
     {:ok, sample_size} = Caps.format_to_sample_size(format)
     t = Time.native_monotonic_time
 
-    payload = payload
-      |> Enum.map(&IO.iodata_to_binary/1)
-      |> zip_longest_binary_by(sample_size, &mix(&1, mix_params format))
+    buffer = buffers
+      |> zip_longest_binary_by(sample_size, fn buf -> do_mix buf, format |> mix_params end)
 
-    debug "mixing time: #{(Time.native_monotonic_time - t) * 1000 / Time.native_resolution} ms, payload size: #{byte_size payload}"
+    debug "mixing time: #{(Time.native_monotonic_time - t) * 1000 / Time.native_resolution} ms, buffer size: #{byte_size buffer}"
 
-    {:ok, [{:send, {:source, %Buffer{payload: payload}}}], state}
+    buffer
   end
 
-  @doc false
-  def handle_stop(state) do
-    {:ok, state}
-  end
 end

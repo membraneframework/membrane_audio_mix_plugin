@@ -1,5 +1,6 @@
 defmodule Membrane.Element.AudioMixer.IOQueue do
   alias Membrane.Element.AudioMixer.IOQueue
+  use Membrane.Helper
 
   @qe Qex
 
@@ -8,7 +9,7 @@ defmodule Membrane.Element.AudioMixer.IOQueue do
 
   def new, do: %IOQueue{q: @qe.new}
   def new init do
-    new |> push(init)
+    new() |> push(init)
   end
 
   def push(q, binary) when is_binary binary do
@@ -29,16 +30,27 @@ defmodule Membrane.Element.AudioMixer.IOQueue do
     {r, new_q} = @qe.pop q
     {r, %IOQueue{q: new_q}}
   end
-  def pop q, :binary do
+  def pop %IOQueue{q: q}, cnt do
+    if q |> Enum.count >= cnt,
+    do: q |> @qe.pop ~> ({q1, q2} -> {{:value, q1 |> Enum.to_list}, q2}),
+    else: {{:empty, q}, Qex.new}
+  end
+
+  def pop_binary q do
     case pop q do
-      {{:value, []}, new_q} -> pop new_q, :binary
+      {{:value, []}, new_q} -> pop_binary new_q
       {{:value, [h]}, new_q} -> {{:value, h}, new_q}
       {{:value, [h|t]}, new_q} -> {{:value, h}, new_q |> push_front(t)}
       empty -> empty
     end
   end
+  def pop_binary q, bytes do
+    {{t, r}, q} = pop_bytes_r q, bytes
+    {{t, r |> Enum.reverse}, q}
+  end
+
   defp pop_bytes_r q, bytes, acc \\ [] do
-    case pop q, :binary do
+    case pop_binary q do
       {{:value, b}, new_q} ->
         case b do
           <<_::binary-size(bytes)>> ->
@@ -50,13 +62,9 @@ defmodule Membrane.Element.AudioMixer.IOQueue do
       {:empty, new_q} -> {{:empty, acc}, new_q}
     end
   end
-  def pop q, bytes do
-    {{t, r}, q} = pop_bytes_r q, bytes
-    {{t, r |> Enum.reverse}, q}
-  end
 
   def empty q do
-    case q |> pop(:binary) do
+    case q |> pop_binary do
       {:empty, _} -> true
       _ -> false
     end
