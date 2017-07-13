@@ -16,8 +16,8 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     {:ok, state}
   end
 
-  def handle_caps(:sink, caps, _, state) do
-    {:ok, [{:caps, {:source, caps}}], state}
+  def handle_caps(_sink, caps, _, state) do
+    {:ok, {[caps: {:source, caps}], state}}
   end
 
   def handle_demand(:source, size, _, %{sink_queues: queues} = state) do
@@ -33,15 +33,16 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     queues = queues
       |> Map.update!(sink, fn q -> q |> Qex.push(buffer) end)
 
-    if queues |> Enum.any?(&Enum.empty?/1) do
-      {:ok, {[], state}}
+    if queues |> Enum.any?(fn {_s, q} -> q |> Enum.empty? end) do
+      {:ok, {[], %{state | sink_queues: queues}}}
     else
       queues
-        |> Enum.map(fn q -> q |> Qex.pop ~> ({{:value, %Buffer{payload: p}}, nq} -> {p, nq}) end)
+        |> Enum.map(fn {s, q} -> q |> Qex.pop ~> ({{:value, %Buffer{payload: p}}, nq} -> {p, {s, nq}}) end)
         |> Enum.unzip
         ~> ({payloads, queues} ->
-            buffer = %Buffer{payload: payloads |> Mixer.mix(caps)}
-            {:ok, {[{:buffer, {:source, buffer}}], %{state | sink_queues: queues}}}
+            {%Buffer{payload: payloads |> Mixer.mix(caps)}, queues |> Enum.into(%{})})
+        ~> ({buffer, queues} ->
+            {:ok, {[buffer: {:source, buffer}], %{state | sink_queues: queues}}}
           )
     end
   end
