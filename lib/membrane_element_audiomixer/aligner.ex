@@ -4,16 +4,22 @@ defmodule Membrane.Element.AudioMixer.Aligner do
   alias Membrane.Element.AudioMixer.Mixer
   alias Membrane.Buffer
 
-  @sinks [:sink1, :sink2]
-
   def_known_source_pads %{
     :source => {:always, :pull, :any}
   }
-  def_known_sink_pads @sinks |> Enum.into(%{}, fn sink -> {sink, {:always, :pull, :any}} end)
+  def_known_sink_pads %{}
 
   def handle_init(_) do
-    state = %{sink_queues: @sinks |> Enum.into(%{}, fn sink -> {sink, Qex.new} end)}
+    state = %{sink_queues: %{}}
     {:ok, state}
+  end
+
+  def handle_new_pad(pad, :sink, _, state) do
+    {:ok, {{pad, {:always, :pull, :any}}, state}}
+  end
+
+  def handle_pad_added(pad, :sink, state) do
+    {:ok, {[], state |> Helper.Map.put_in([:sink_queues, pad], Qex.new)}}
   end
 
   def handle_caps(_sink, caps, _, state) do
