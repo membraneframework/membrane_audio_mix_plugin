@@ -14,8 +14,8 @@ defmodule Membrane.Element.AudioMixer.Aligner do
     {:ok, state}
   end
 
-  def handle_new_pad(pad, :sink, _, state) do
-    {:ok, {{pad, {:always, :pull, :any}}, state}}
+  def handle_new_pad(_pad, :sink, _, state) do
+    {:ok, {{:always, :pull, :any}, state}}
   end
 
   def handle_pad_added(pad, :sink, state) do
