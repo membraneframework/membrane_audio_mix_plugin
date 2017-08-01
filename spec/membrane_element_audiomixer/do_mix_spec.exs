@@ -1,4 +1,4 @@
-defmodule Membrane.Element.AudioMixer.MixerSpec do
+defmodule Membrane.Element.AudioMixer.DoMixSpec do
   use ESpec, async: false
   use Bitwise
   alias Membrane.Caps.Audio.Raw, as: Caps

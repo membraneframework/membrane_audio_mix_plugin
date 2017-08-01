@@ -1,4 +1,4 @@
-defmodule Membrane.Element.AudioMixer.AlignerSpec do
+defmodule Membrane.Element.AudioMixer.MixerSpec do
   use ESpec, async: false
   use Bitwise
   import Enum
