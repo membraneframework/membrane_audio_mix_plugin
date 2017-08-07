@@ -22,6 +22,10 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     {:ok, {[], state |> Helper.Map.put_in([:sink_queues, pad], Qex.new)}}
   end
 
+  def handle_pad_removed(pad, state) do
+    {:ok, {[], state |> Helper.Map.remove_in([:sink_queues, pad])}}
+  end
+
   def handle_caps(_sink, caps, _, state) do
     {:ok, {[caps: {:source, caps}], state}}
   end
