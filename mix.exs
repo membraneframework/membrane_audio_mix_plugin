@@ -25,7 +25,7 @@ defmodule Membrane.Element.AudioMixer.Mixfile do
 
   defp deps do
     [
-      {:membrane_core, git: "git@github.com:membraneframework/membrane-core.git", branch: "feature/feature/pull"},
+      {:membrane_core, git: "git@github.com:membraneframework/membrane-core.git", branch: "feature/pull"},
       {:membrane_caps_audio_raw, git: "git@github.com:membraneframework/membrane-caps-audio-raw.git"},
       {:espec, "~> 1.1.2", only: :test},
       {:ex_doc, "~> 0.14", only: :dev},
