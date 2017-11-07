@@ -7,4 +7,3 @@
 .DS_Store
 /doc
 erl_crash.dump
-/mix.lock
