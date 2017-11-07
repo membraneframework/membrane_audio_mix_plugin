@@ -23,7 +23,6 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   end
 
   def handle_pad_removed(pad, state) do
-    info inspect {:pad_removed, state}
     {:ok, state |> Helper.Map.remove_in([:sink_queues, pad])}
   end
 
