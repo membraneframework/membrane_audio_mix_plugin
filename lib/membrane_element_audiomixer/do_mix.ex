@@ -68,12 +68,12 @@ defmodule Membrane.Element.AudioMixer.DoMix do
   @doc false
   def mix(buffers, %Caps{format: format}) do
     {:ok, sample_size} = Caps.format_to_sample_size(format)
-    t = Time.native_monotonic_time
+    t = Time.monotonic_time
 
     buffer = buffers
       |> zip_longest_binary_by(sample_size, fn buf -> do_mix buf, format |> mix_params end)
 
-    debug "mixing time: #{(Time.native_monotonic_time - t) * 1000 / Time.native_resolution} ms, buffer size: #{byte_size buffer}"
+    debug "mixing time: #{(Time.monotonic_time - t) |> Time.to_milliseconds} ms, buffer size: #{byte_size buffer}"
 
     buffer
   end
