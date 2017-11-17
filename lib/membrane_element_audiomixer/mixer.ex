@@ -38,9 +38,13 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   def handle_process1(sink, %Buffer{payload: payload}, %{caps: caps}, %{sink_queues: queues} = state) do
     queues = queues |> Map.update!(sink, & &1 <> payload)
 
-    min_size = queues |> Map.values |> Enum.map(&byte_size/1) |> Enum.min
+    min_size = queues
+      |> Map.values
+      |> Enum.map(&byte_size/1)
+      |> Enum.min
+      |> int_part(Caps.format_to_sample_size!(caps.format) * caps.channels)
 
-    if min_size < Caps.format_to_sample_size!(caps.format) * caps.channels do
+    if min_size == 0 do
       {:ok, %{state | sink_queues: queues}}
     else
       queues
