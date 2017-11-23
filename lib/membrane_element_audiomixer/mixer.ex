@@ -15,23 +15,23 @@ defmodule Membrane.Element.AudioMixer.Mixer do
 
   def handle_init(_) do
     state = %{
-      sink_queues: %{},
-      sink_ends: [],
+      sinks: %{},
+      ending_sinks: [],
     }
     {:ok, state}
   end
 
   def handle_pad_added(pad, :sink, state) do
-    {:ok, state |> Helper.Map.put_in([:sink_queues, pad], <<>>)}
+    {:ok, state |> Helper.Map.put_in([:sinks, pad], %{queue: <<>>})}
   end
 
   def handle_pad_removed(pad, state) do
-    {:ok, state |> Helper.Map.remove_in([:sink_queues, pad])}
+    {:ok, state |> Helper.Map.remove_in([:sinks, pad])}
   end
 
-  def handle_demand(:source, size, :bytes, _, %{sink_queues: queues} = state) do
-    demands = queues
-      |> Enum.map(fn {sink, q} -> {:demand, {sink,
+  def handle_demand(:source, size, :bytes, _, %{sinks: sinks} = state) do
+    demands = sinks
+      |> Enum.map(fn {sink, %{queue: q}} -> {:demand, {sink,
           q |> byte_size ~> (s -> max 0, size - s)
         }} end)
 
@@ -39,47 +39,62 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   end
 
   def handle_event({:dynamic, :sink, _id} = sink, %Event{type: :eos}, _, state) do
-    {:ok, state |> Map.update!(:sink_ends, & [sink | &1])}
+    {:ok, state |> Map.update!(:ending_sinks, & [sink | &1])}
   end
   def handle_event(pad, event, params, state) do
     super(pad, event, params, state)
   end
 
   def handle_process1(
-    sink, %Buffer{payload: payload}, %{caps: caps}, %{sink_queues: queues, sink_ends: ends} = state
+    sink, %Buffer{payload: payload}, %{caps: caps}, %{sinks: sinks, ending_sinks: ending} = state
   ) do
-    queues = queues |> Map.update!(sink, & &1 <> payload)
+    sinks = sinks |> Helper.Map.update_in([sink, :queue], & &1 <> payload)
 
     time_frame = Caps.format_to_sample_size!(caps.format) * caps.channels
 
-    min_size = queues
-      |> Map.values
-      |> Enum.map(&byte_size/1)
-      |> Enum.min
-      |> int_part(time_frame)
+    min_size = min_size(sinks, time_frame)
 
     if min_size == 0 do
-      {:ok, %{state | sink_queues: queues}}
+      {:ok, %{state | sinks: sinks}}
     else
-      {payloads, queues} = queues
-        |> Enum.map(fn {s, <<p::binary-size(min_size), nq::binary>>} -> {p, {s, nq}} end)
-        |> Enum.unzip
+      {payload, sinks} = mix(sinks, min_size, caps)
 
-      payload = payloads |> DoMix.mix(caps)
-      queues = queues |> Map.new
-
-      {ends, queues} = ends |> Enum.flat_map_reduce(queues, fn sink, queues ->
-          case queues[sink] do
-            q when byte_size(q) < time_frame -> {[], queues |> Map.delete(sink)}
-            _ -> {[sink], queues}
-          end
-        end)
+      {ending, sinks} = remove_finished_sinks(ending, sinks, time_frame)
 
       {
         {:ok, buffer: {:source, %Buffer{payload: payload}}},
-        %{state | sink_queues: queues, sink_ends: ends}
+        %{state | sinks: sinks, ending_sinks: ending}
       }
     end
+  end
+
+
+  defp min_size(sinks, time_frame) do
+    sinks
+      |> Enum.map(fn {_sink, %{queue: q}} -> q end)
+      |> Enum.map(&byte_size/1)
+      |> Enum.min
+      |> int_part(time_frame)
+  end
+
+  defp mix(sinks, min_size, caps) do
+    {payloads, sinks} = sinks
+      |> Enum.map(fn {s, %{queue: <<p::binary-size(min_size), nq::binary>>}} -> {p, {s, %{queue: nq}}} end)
+      |> Enum.unzip
+
+    payload = payloads |> DoMix.mix(caps)
+    sinks = sinks |> Map.new
+    {payload, sinks}
+  end
+
+  defp remove_finished_sinks(ending_sinks, sinks, time_frame) do
+    {ending, sinks} = ending_sinks |> Enum.flat_map_reduce(sinks, fn sink, sinks ->
+        case sinks[sink].queue do
+          q when byte_size(q) < time_frame -> {[], sinks |> Map.delete(sink)}
+          _ -> {[sink], sinks}
+        end
+      end)
+    {ending, sinks}
   end
 
 end
