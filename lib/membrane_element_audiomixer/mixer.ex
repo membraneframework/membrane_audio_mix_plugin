@@ -77,6 +77,12 @@ defmodule Membrane.Element.AudioMixer.Mixer do
       |> int_part(time_frame)
   end
 
+  defp mix(sinks, min_size, _caps) when map_size(sinks) == 1 do
+    {sink, data} = sinks |> Map.to_list |> hd
+    %{queue: <<p::binary-size(min_size), q::binary>>} = data
+    {p, %{sink => %{data | queue: q}}}
+  end
+
   defp mix(sinks, min_size, caps) do
     {payloads, sinks} = sinks
       |> Enum.map(fn {s, %{queue: <<p::binary-size(min_size), nq::binary>>}} -> {p, {s, %{queue: nq}}} end)
@@ -89,8 +95,9 @@ defmodule Membrane.Element.AudioMixer.Mixer do
 
   defp remove_finished_sinks(ending_sinks, sinks, time_frame) do
     {ending, sinks} = ending_sinks |> Enum.flat_map_reduce(sinks, fn sink, sinks ->
-        case sinks[sink].queue do
-          q when byte_size(q) < time_frame -> {[], sinks |> Map.delete(sink)}
+        case sinks[sink] do
+          %{queue: q} when byte_size(q) < time_frame -> {[], sinks |> Map.delete(sink)}
+          nil -> {[], sinks}
           _ -> {[sink], sinks}
         end
       end)
