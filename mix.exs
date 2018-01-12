@@ -16,8 +16,7 @@ defmodule Membrane.Element.AudioMixer.Mixfile do
   end
 
   def application do
-    [applications: [
-      :membrane_core
+    [extra_applications: [
       ], mod: {Membrane.Element.AudioMixer, []}]
   end
 

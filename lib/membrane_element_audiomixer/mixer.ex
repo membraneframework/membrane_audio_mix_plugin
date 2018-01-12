@@ -20,11 +20,11 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     {:ok, state}
   end
 
-  def handle_pad_added(_pad, :sink, state) do
+  def handle_pad_added(_pad, %{direction: :sink}, state) do
     {:ok, state}
   end
 
-  def handle_pad_removed({:dynamic, :sink, _} = pad, state) do
+  def handle_pad_removed({:dynamic, :sink, _} = pad, %{direction: :sink}, state) do
     {:ok, state |> Helper.Map.remove_in([:sinks, pad])}
   end
 

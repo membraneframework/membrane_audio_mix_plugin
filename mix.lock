@@ -3,5 +3,5 @@
   "ex_doc": {:hex, :ex_doc, "0.18.1", "37c69d2ef62f24928c1f4fdc7c724ea04aecfdf500c4329185f8e3649c915baf", [:mix], [{:earmark, "~> 1.1", [hex: :earmark, optional: false]}]},
   "meck": {:hex, :meck, "0.8.8", "eeb3efe811d4346e1a7f65b2738abc2ad73cbe1a2c91b5dd909bac2ea0414fa6", [:rebar3], []},
   "membrane_caps_audio_raw": {:git, "git@github.com:membraneframework/membrane-caps-audio-raw.git", "8fd9c1c7a33a46b544ca857581fdcd20b08f55e2", []},
-  "membrane_core": {:git, "git@github.com:membraneframework/membrane-core.git", "2a7a1b41ab1136ffed6f43dfa9d415dd12b33502", []},
+  "membrane_core": {:git, "git@github.com:membraneframework/membrane-core.git", "f6367a426ac9c9b29103c8b9629616678088f6be", []},
   "qex": {:hex, :qex, "0.3.3", "d1c038de10308dcc489b9e2f50ebb019b2ffecb1753a4f1535f24b6b702491b0", [:mix], []}}
