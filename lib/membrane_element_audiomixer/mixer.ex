@@ -4,15 +4,15 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   alias Membrane.Element.AudioMixer.DoMix
   alias Membrane.{Buffer, Event}
   alias Membrane.Caps.Audio.Raw, as: Caps
-  use Membrane.Mixins.Log, tags: :membrane_element_audiomixer
+  use Membrane.Log, tags: :membrane_element_audiomixer
 
-  def_known_source_pads %{
-    :source => {:always, :pull, :any}
-  }
-  def_known_sink_pads %{
-    {:dynamic, :sink} => {:always, {:pull, demand_in: :bytes}, :any}
-  }
+  def_options []
 
+  def_known_source_pads source: {:always, :pull, Caps}
+
+  def_known_sink_pads sink: {:on_request, {:pull, demand_in: :bytes}, Caps}
+
+  @impl true
   def handle_init(_) do
     state = %{
       sinks: %{},
@@ -20,14 +20,17 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     {:ok, state}
   end
 
+  @impl true
   def handle_pad_added(_pad, %{direction: :sink}, state) do
     {:ok, state}
   end
 
+  @impl true
   def handle_pad_removed({:dynamic, :sink, _} = pad, %{direction: :sink}, state) do
     {:ok, state |> Helper.Map.remove_in([:sinks, pad])}
   end
 
+  @impl true
   def handle_demand(:source, size, :bytes, _, %{sinks: sinks} = state) do
     demands = sinks
       |> Enum.map(fn {sink, %{queue: q}} -> {:demand, {sink,
@@ -37,6 +40,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     {{:ok, demands}, state}
   end
 
+  @impl true
   def handle_event({:dynamic, :sink, _id} = sink, %Event{type: :sos}, _, state) do
     info "mixer sos #{inspect sink}"
     new_channel = %Event{type: :channel_added, stick_to: :buffer}
@@ -55,6 +59,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     super(pad, event, params, state)
   end
 
+  @impl true
   def handle_process1(sink, buffer, params, state) do
 
     %Buffer{payload: payload} = buffer

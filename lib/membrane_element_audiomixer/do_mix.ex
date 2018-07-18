@@ -17,7 +17,7 @@ defmodule Membrane.Element.AudioMixer.DoMix do
 
   alias Membrane.Time
   alias Membrane.Caps.Audio.Raw, as: Caps
-  use Membrane.Mixins.Log
+  use Membrane.Log, tags: :membrane_element_audiomixer
   use Membrane.Helper
 
   @doc false
