@@ -39,35 +39,39 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   def handle_init(%__MODULE__{caps: caps}) do
     state = %{
       caps: caps,
-      inputs: %{}
+      pads: %{}
     }
+
+    IO.inspect caps
 
     {:ok, state}
   end
 
   @impl true
-  def handle_pad_added(_pad, _context, state) do
+  def handle_pad_added(pad, _context, state) do
+    IO.inspect pad
+
     {:ok, state}
   end
 
   @impl true
   def handle_pad_removed(pad, _context, state) do
-    state = Bunch.Access.delete_in(state, [:inputs, pad])
+    state = Bunch.Access.delete_in(state, [:pads, pad])
 
     {:ok, state}
   end
 
   @impl true
-  def handle_demand(:output, size, :bytes, _context, %{inputs: inputs} = state) do
+  def handle_demand(:output, size, :bytes, _context, %{pads: pads} = state) do
     demands =
-      inputs
-      |> Enum.map(fn {input, %{queue: queue}} ->
+      pads
+      |> Enum.map(fn {pad, %{queue: queue}} ->
         demand_size =
           queue
           |> byte_size()
           |> then(fn s -> max(0, size - s) end)
 
-        {:demand, {input, demand_size}}
+        {:demand, {pad, demand_size}}
       end)
 
     {{:ok, demands}, state}
@@ -82,7 +86,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     state =
       Bunch.Access.put_in(
         state,
-        [:inputs, pad],
+        [:pads, pad],
         %{queue: <<>>, eos: false}
       )
 
@@ -96,7 +100,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     state =
       Bunch.Access.update_in(
         state,
-        [:inputs, pad],
+        [:pads, pad],
         &%{&1 | eos: true}
       )
 
@@ -111,26 +115,30 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   @impl true
   def handle_process(pad, buffer, _context, state) do
     %Buffer{payload: payload} = buffer
-    %{caps: caps, inputs: inputs} = state
+    %{caps: caps, pads: pads} = state
 
     time_frame = Caps.frame_size(caps)
 
-    {size, inputs} =
+    {size, pads} =
       Bunch.Access.get_and_update_in(
-        inputs,
+        pads,
         [pad, :queue],
         &{byte_size(&1), &1 <> payload}
       )
 
     if size >= time_frame do
-      do_handle_process(caps, %{state | inputs: inputs})
+      do_handle_process(caps, %{state | pads: pads})
     else
-      {{:ok, redemand: :output}, %{state | inputs: inputs}}
+      {{:ok, redemand: :output}, %{state | pads: pads}}
     end
   end
 
   @impl true
-  def handle_caps(:input, _caps, _context, state) do
+  def handle_caps(:input, caps, _context, state) do
+    if caps != state.caps do
+      raise(RuntimeError, :incompatible_audio_format_on_pad)
+    end
+
     caps = %Caps{
       channels: 1,
       format: :s16le,
@@ -145,17 +153,17 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   end
 
   defp do_handle_process(caps, state) do
-    %{inputs: inputs} = state
+    %{pads: pads} = state
 
     time_frame = Caps.frame_size(caps)
-    mix_size = mix_size(inputs, time_frame)
+    mix_size = mix_size(pads, time_frame)
 
     if mix_size >= time_frame do
-      {payload, inputs} = mix(inputs, mix_size, caps)
-      inputs = remove_finished_inputs(inputs, time_frame)
+      {payload, pads} = mix(pads, mix_size, caps)
+      pads = remove_finished_pads(pads, time_frame)
 
       buffer = {:output, %Buffer{payload: payload}}
-      state = %{state | inputs: inputs}
+      state = %{state | pads: pads}
 
       {{:ok, buffer: buffer}, state}
     else
@@ -163,16 +171,16 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     end
   end
 
-  defp mix_size(inputs, time_frame) do
+  defp mix_size(pads, time_frame) do
     fallback = fn ->
-      inputs
-      |> Enum.map(fn {_input, %{queue: queue}} -> byte_size(queue) end)
+      pads
+      |> Enum.map(fn {_pad, %{queue: queue}} -> byte_size(queue) end)
       |> Enum.max()
     end
 
-    inputs
+    pads
     |> Enum.flat_map(fn
-      {_input, %{queue: queue, eos: false}} -> [byte_size(queue)]
+      {_pad, %{queue: queue, eos: false}} -> [byte_size(queue)]
       _ -> []
     end)
     |> Enum.min(fallback)
@@ -185,39 +193,39 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     number - rest
   end
 
-  defp mix(inputs, mix_size, _caps) when map_size(inputs) == 1 do
-    {input, data} =
-      inputs
+  defp mix(pads, mix_size, _caps) when map_size(pads) == 1 do
+    {pad, data} =
+      pads
       |> Map.to_list()
       |> hd()
 
     <<payload::binary-size(mix_size), queue::binary>> = data.queue
 
-    {payload, %{input => %{data | queue: queue}}}
+    {payload, %{pad => %{data | queue: queue}}}
   end
 
-  defp mix(inputs, mix_size, caps) do
-    {payloads, inputs} =
-      inputs
+  defp mix(pads, mix_size, caps) do
+    {payloads, pads} =
+      pads
       |> Enum.map(fn
-        {input, %{queue: <<payload::binary-size(mix_size), queue::binary>>} = data} ->
-          {payload, {input, %{data | queue: queue}}}
+        {pad, %{queue: <<payload::binary-size(mix_size), queue::binary>>} = data} ->
+          {payload, {pad, %{data | queue: queue}}}
 
-        {input, %{queue: payload} = data} ->
-          {payload, {input, %{data | queue: <<>>}}}
+        {pad, %{queue: payload} = data} ->
+          {payload, {pad, %{data | queue: <<>>}}}
       end)
       |> Enum.unzip()
 
     payload = DoMix.mix(payloads, caps)
-    inputs = Map.new(inputs)
-    {payload, inputs}
+    pads = Map.new(pads)
+    {payload, pads}
   end
 
-  defp remove_finished_inputs(inputs, time_frame) do
-    inputs
+  defp remove_finished_pads(pads, time_frame) do
+    pads
     |> Enum.flat_map(fn
-      {_input, %{queue: queue, eos: true}} when byte_size(queue) < time_frame -> []
-      input_data -> [input_data]
+      {_pad, %{queue: queue, eos: true}} when byte_size(queue) < time_frame -> []
+      pad_data -> [pad_data]
     end)
     |> Map.new()
   end
