@@ -14,7 +14,8 @@ defmodule Membrane.Element.AudioMixer.Mixer do
                 description: """
                 The value defines a raw audio format of pads connected to the
                 element. It should be the same for all the pads.
-                """
+                """,
+                default: nil
               ]
 
   def_output_pad :output,
@@ -42,14 +43,17 @@ defmodule Membrane.Element.AudioMixer.Mixer do
       pads: %{}
     }
 
-    IO.inspect caps
-
     {:ok, state}
   end
 
   @impl true
   def handle_pad_added(pad, _context, state) do
-    IO.inspect pad
+    state =
+      Bunch.Access.put_in(
+        state,
+        [:pads, pad],
+        %{queue: <<>>, stream_ended: false}
+      )
 
     {:ok, state}
   end
@@ -78,17 +82,20 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   end
 
   @impl true
-  def handle_start_of_stream(pad, _context, state) do
+  def handle_start_of_stream(pad, context, state) do
     info("mixer start of stream #{inspect(pad)}")
 
-    demand = get_default_demand(state)
+    offset = context.pads[pad].options.offset
+    silence = Caps.sound_of_silence(state.caps, offset)
 
     state =
-      Bunch.Access.put_in(
+      Bunch.Access.update_in(
         state,
         [:pads, pad],
-        %{queue: <<>>, eos: false}
+        &%{&1 | queue: silence}
       )
+
+    demand = get_default_demand(state)
 
     {{:ok, demand: {pad, demand}}, state}
   end
@@ -101,7 +108,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
       Bunch.Access.update_in(
         state,
         [:pads, pad],
-        &%{&1 | eos: true}
+        &%{&1 | stream_ended: true}
       )
 
     {:ok, state}
@@ -135,17 +142,20 @@ defmodule Membrane.Element.AudioMixer.Mixer do
 
   @impl true
   def handle_caps(:input, caps, _context, state) do
-    if caps != state.caps do
-      raise(RuntimeError, :incompatible_audio_format_on_pad)
+    cond do
+      state.caps == nil ->
+        state = %{state | caps: caps}
+        {{:ok, caps: {:output, caps}}, state}
+
+      state.caps == caps ->
+        {:ok, state}
+
+      true ->
+        raise(
+          RuntimeError,
+          "incompatible audio formats: they should be identical on all pads and match caps provided as element option"
+        )
     end
-
-    caps = %Caps{
-      channels: 1,
-      format: :s16le,
-      sample_rate: 16_000
-    }
-
-    {{:ok, caps: {:output, caps}}, state}
   end
 
   defp get_default_demand(%{caps: caps} = _state) do
@@ -180,7 +190,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
 
     pads
     |> Enum.flat_map(fn
-      {_pad, %{queue: queue, eos: false}} -> [byte_size(queue)]
+      {_pad, %{queue: queue, stream_ended: false}} -> [byte_size(queue)]
       _ -> []
     end)
     |> Enum.min(fallback)
@@ -224,7 +234,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
   defp remove_finished_pads(pads, time_frame) do
     pads
     |> Enum.flat_map(fn
-      {_pad, %{queue: queue, eos: true}} when byte_size(queue) < time_frame -> []
+      {_pad, %{queue: queue, stream_ended: true}} when byte_size(queue) < time_frame -> []
       pad_data -> [pad_data]
     end)
     |> Map.new()
