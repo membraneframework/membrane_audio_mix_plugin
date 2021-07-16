@@ -1,12 +1,12 @@
-defmodule Membrane.Element.AudioMixer.Mixfile do
+defmodule Membrane.AudioMixer.Mixfile do
   use Mix.Project
 
   @version "0.1.0"
-  @github_url "https://github.com/membraneframework/TODO"
+  @github_url "https://github.com/membraneframework/membrane_audio_mixer_plugin"
 
   def project do
     [
-      app: :membrane_element_audiomixer,
+      app: :membrane_audio_mixer_plugin,
       version: @version,
       elixir: "~> 1.12",
       compilers: Mix.compilers(),
@@ -15,7 +15,7 @@ defmodule Membrane.Element.AudioMixer.Mixfile do
       deps: deps(),
       description: "Plugin performing raw audio mixing.",
       package: package(),
-      name: "TODO",
+      name: "Membrane Audio Mixer plugin",
       source_url: @github_url,
       homepage_url: "https://membraneframework.org",
       docs: docs()
@@ -24,8 +24,7 @@ defmodule Membrane.Element.AudioMixer.Mixfile do
 
   def application do
     [
-      extra_applications: [],
-      mod: {Membrane.Element.AudioMixer, []}
+      extra_applications: []
     ]
   end
 
@@ -36,9 +35,11 @@ defmodule Membrane.Element.AudioMixer.Mixfile do
       {:membrane_core, "~> 0.7.0", override: true},
       {:membrane_caps_audio_raw, "~> 0.3.0", override: true},
       {:espec, "~> 1.1.2", only: :test},
-      {:ex_doc, "~> 0.14", only: :dev},
       {:qex, "~> 0.3"},
-      {:bunch, "~> 1.0"}
+      {:bunch, "~> 1.0"},
+      {:ex_doc, "~> 0.24", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.0.0", only: :dev, runtime: false},
+      {:credo, "~> 1.5", only: :dev, runtime: false}
     ]
   end
 
@@ -59,7 +60,7 @@ defmodule Membrane.Element.AudioMixer.Mixfile do
       main: "readme",
       extras: ["README.md", "LICENSE"],
       source_ref: "v#{@version}",
-      nest_modules_by_prefix: [Membrane.TODO]
+      nest_modules_by_prefix: [Membrane.AudioMixer]
     ]
   end
 end

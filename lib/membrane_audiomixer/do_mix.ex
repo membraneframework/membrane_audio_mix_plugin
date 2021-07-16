@@ -1,15 +1,14 @@
-defmodule Membrane.Element.AudioMixer.DoMix do
+defmodule Membrane.AudioMixer.DoMix do
   @moduledoc """
-  This element mixes audio paths (all in the same format, with the same amount
-  of channels and sample rate) received from inputs, and sends resulting single path forwards
-  through the output, in the format mixed paths are encoded in. If overflow
-  happens during mixing, it is being clipped to the max value of sample in this
-  format.
+  This element mixes audio paths (all in the same format, with the same amount of channels and
+  sample rate) received from input pads. Result is a single path in the format mixed paths are
+  encoded in. If overflow happens during mixing, it is being clipped to the max value of sample
+  in this format.
   """
 
   alias Membrane.Time
   alias Membrane.Caps.Audio.Raw, as: Caps
-  use Membrane.Log, tags: :membrane_element_audiomixer
+  use Membrane.Log, tags: :membrane_audio_mixer
 
   @doc """
   Mixes `buffers` to one buffer. It uses information about samples provided in `caps`.

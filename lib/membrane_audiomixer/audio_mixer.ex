@@ -1,12 +1,25 @@
-defmodule Membrane.Element.AudioMixer.Mixer do
+defmodule Membrane.AudioMixer do
+  @moduledoc """
+  This element performs audio mixing.
+
+  Audio format can be set as an element option or received through caps from input pads. All
+  received caps have to be identical and match ones in element option (if that option is
+  different than nil).
+
+  Input pads can have offset - it tells how much silence should be added before first sample
+  from that pad. Offset have to be positive.
+
+  Mixer mixes only raw audio (PCM), so some parser may be needed to precede it in pipeline.
+  """
+
   use Membrane.Filter
   use Bunch
+  use Membrane.Log, tags: :membrane_audio_mixer
 
-  alias Membrane.Element.AudioMixer.DoMix
+  alias Membrane.AudioMixer.DoMix
   alias Membrane.Buffer
   alias Membrane.Caps.Audio.Raw, as: Caps
   alias Membrane.Time
-  use Membrane.Log, tags: :membrane_element_audiomixer
 
   def_options caps: [
                 type: :struct,
@@ -197,7 +210,7 @@ defmodule Membrane.Element.AudioMixer.Mixer do
     |> int_part(time_frame)
   end
 
-  # returns the biggest multiple of `divisor` that is not bigger than `number`
+  # Returns the biggest multiple of `divisor` that is not bigger than `number`
   defp int_part(number, divisor) when is_integer(number) and is_integer(divisor) do
     rest = rem(number, divisor)
     number - rest
