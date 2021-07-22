@@ -9,7 +9,7 @@ defmodule Membrane.AudioMixer do
   Input pads can have offset - it tells how much silence should be added before first sample
   from that pad. Offset have to be positive.
 
-  Mixer mixes only raw audio (PCM), so some parser may be needed to precede it in pipeline.
+  Mixer mixes only raw audio (LPCM), so some parser may be needed to precede it in pipeline.
   """
 
   use Membrane.Filter
@@ -29,6 +29,15 @@ defmodule Membrane.AudioMixer do
                 element. It should be the same for all the pads.
                 """,
                 default: nil
+              ],
+              frames_per_buffer: [
+                type: :integer,
+                spec: pos_integer(),
+                description: """
+                Assumed number of raw audio frames in each buffer.
+                Used when converting demand from buffers into bytes.
+                """,
+                default: 2048
               ]
 
   def_output_pad :output,
@@ -50,11 +59,11 @@ defmodule Membrane.AudioMixer do
     ]
 
   @impl true
-  def handle_init(%__MODULE__{caps: caps}) do
-    state = %{
-      caps: caps,
-      pads: %{}
-    }
+  def handle_init(%__MODULE__{} = options) do
+    state =
+      options
+      |> Map.from_struct()
+      |> Map.put(:pads, %{})
 
     {:ok, state}
   end
@@ -79,19 +88,15 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_demand(:output, size, :bytes, _context, %{pads: pads} = state) do
-    demands =
-      pads
-      |> Enum.map(fn {pad, %{queue: queue}} ->
-        demand_size =
-          queue
-          |> byte_size()
-          |> then(fn s -> max(0, size - s) end)
+  def handle_demand(:output, size, :bytes, _context, state) do
+    do_handle_demand(size, state)
+  end
 
-        {:demand, {pad, demand_size}}
-      end)
+  @impl true
+  def handle_demand(:output, buffers_count, :buffers, _context, %{frames_per_buffer: frames, caps: caps} = state) do
+    size = buffers_count * Caps.frames_to_bytes(frames, caps)
 
-    {{:ok, demands}, state}
+    do_handle_demand(size, state)
   end
 
   @impl true
@@ -118,13 +123,29 @@ defmodule Membrane.AudioMixer do
     info("mixer end of stream #{inspect(pad)}")
 
     state =
-      Bunch.Access.update_in(
-        state,
-        [:pads, pad],
-        &%{&1 | stream_ended: true}
-      )
+      case Bunch.Access.get_in(state, [:pads, pad]) do
+        %{queue: <<>>} ->
+          Bunch.Access.delete_in(state, [:pads, pad])
+        _ ->
+          Bunch.Access.update_in(
+            state,
+            [:pads, pad],
+            &%{&1 | stream_ended: true}
+          )
+      end
 
-    {:ok, state}
+    {buffer, state} = process(state)
+
+    all_streams_ended =
+      state.pads
+      |> Enum.map(fn {_pad, %{stream_ended: stream_ended}} -> stream_ended end)
+      |> Enum.all?()
+
+    if all_streams_ended do
+      {{:ok, buffer: buffer, end_of_stream: :output}, state}
+    else
+      {{:ok, buffer: buffer}, state}
+    end
   end
 
   @impl true
@@ -133,10 +154,7 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_process(pad, buffer, _context, state) do
-    %Buffer{payload: payload} = buffer
-    %{caps: caps, pads: pads} = state
-
+  def handle_process(pad, %Buffer{payload: payload} = _buffer, _context, %{caps: caps, pads: pads} = state) do
     time_frame = Caps.frame_size(caps)
 
     {size, pads} =
@@ -147,7 +165,8 @@ defmodule Membrane.AudioMixer do
       )
 
     if size >= time_frame do
-      do_handle_process(caps, %{state | pads: pads})
+      {buffer, state} = process(%{state | pads: pads})
+      {{:ok, buffer: buffer}, state}
     else
       {{:ok, redemand: :output}, %{state | pads: pads}}
     end
@@ -175,38 +194,47 @@ defmodule Membrane.AudioMixer do
     Caps.time_to_bytes(500, caps)
   end
 
-  defp do_handle_process(caps, state) do
-    %{pads: pads} = state
+  defp do_handle_demand(size, %{pads: pads} = state) do
+    demands =
+      Enum.map(
+        pads,
+        fn {pad, %{queue: queue}} ->
+          demand_size =
+            queue
+            |> byte_size()
+            |> then(fn s -> max(0, size - s) end)
 
+          {:demand, {pad, demand_size}}
+        end
+      )
+
+    {{:ok, demands}, state}
+  end
+
+  defp process(%{caps: caps, pads: pads} = state) do
     time_frame = Caps.frame_size(caps)
     mix_size = mix_size(pads, time_frame)
 
-    if mix_size >= time_frame do
-      {payload, pads} = mix(pads, mix_size, caps)
-      pads = remove_finished_pads(pads, time_frame)
+    {payload, state} =
+      if mix_size >= time_frame do
+        {payload, pads} = mix(pads, mix_size, caps)
+        pads = remove_finished_pads(pads, time_frame)
 
-      buffer = {:output, %Buffer{payload: payload}}
-      state = %{state | pads: pads}
+        state = %{state | pads: pads}
 
-      {{:ok, buffer: buffer}, state}
-    else
-      {:ok, state}
-    end
+        {payload, state}
+      else
+        {<<>>, state}
+      end
+
+    buffer = {:output, %Buffer{payload: payload}}
+    {buffer, state}
   end
 
   defp mix_size(pads, time_frame) do
-    fallback = fn ->
-      pads
-      |> Enum.map(fn {_pad, %{queue: queue}} -> byte_size(queue) end)
-      |> Enum.max()
-    end
-
     pads
-    |> Enum.flat_map(fn
-      {_pad, %{queue: queue, stream_ended: false}} -> [byte_size(queue)]
-      _ -> []
-    end)
-    |> Enum.min(fallback)
+    |> Enum.map(fn {_pad, %{queue: queue}} -> byte_size(queue) end)
+    |> Enum.min(fn -> 0 end)
     |> int_part(time_frame)
   end
 
@@ -222,7 +250,7 @@ defmodule Membrane.AudioMixer do
       |> Map.to_list()
       |> hd()
 
-    <<payload::binary-size(mix_size), queue::binary>> = data.queue
+    <<payload::binary-size(mix_size)>> <> queue = data.queue
 
     {payload, %{pad => %{data | queue: queue}}}
   end
@@ -231,7 +259,7 @@ defmodule Membrane.AudioMixer do
     {payloads, pads} =
       pads
       |> Enum.map(fn
-        {pad, %{queue: <<payload::binary-size(mix_size), queue::binary>>} = data} ->
+        {pad, %{queue: <<payload::binary-size(mix_size)>> <> queue} = data} ->
           {payload, {pad, %{data | queue: queue}}}
 
         {pad, %{queue: payload} = data} ->
@@ -241,6 +269,7 @@ defmodule Membrane.AudioMixer do
 
     payload = DoMix.mix(payloads, caps)
     pads = Map.new(pads)
+
     {payload, pads}
   end
 
