@@ -41,30 +41,30 @@ defmodule DoMixTest do
   describe "DoMix should just sum bytes from inputs in simple cases" do
     defp test_for_several_caps(buffers, reference) do
       caps = [
-        {1, 16000, :s8},
-        {1, 16000, :u8},
-        {1, 16000, :s16le},
-        {1, 16000, :s24le},
-        {1, 16000, :s32le},
-        {1, 16000, :u16le},
-        {1, 16000, :u24le},
-        {1, 16000, :u32le},
-        {1, 16000, :s16be},
-        {1, 16000, :s24be},
-        {1, 16000, :s32be},
-        {1, 16000, :u16be},
-        {1, 16000, :u24be},
-        {1, 16000, :u32be},
-        {1, 44100, :s16le},
-        {1, 44100, :s16be},
-        {2, 16000, :s16le},
-        {2, 16000, :u16le},
-        {2, 16000, :s16be},
-        {2, 16000, :u16be},
-        {6, 16000, :s16le},
-        {6, 16000, :u16le},
-        {6, 16000, :s16be},
-        {6, 16000, :u16be}
+        {1, 16_000, :s8},
+        {1, 16_000, :u8},
+        {1, 16_000, :s16le},
+        {1, 16_000, :s24le},
+        {1, 16_000, :s32le},
+        {1, 16_000, :u16le},
+        {1, 16_000, :u24le},
+        {1, 16_000, :u32le},
+        {1, 16_000, :s16be},
+        {1, 16_000, :s24be},
+        {1, 16_000, :s32be},
+        {1, 16_000, :u16be},
+        {1, 16_000, :u24be},
+        {1, 16_000, :u32be},
+        {1, 44_100, :s16le},
+        {1, 44_100, :s16be},
+        {2, 16_000, :s16le},
+        {2, 16_000, :u16le},
+        {2, 16_000, :s16be},
+        {2, 16_000, :u16be},
+        {6, 16_000, :s16le},
+        {6, 16_000, :u16le},
+        {6, 16_000, :s16be},
+        {6, 16_000, :u16be}
       ]
 
       test_for_caps(caps, buffers, reference)
@@ -104,10 +104,10 @@ defmodule DoMixTest do
   describe "DoMix should work for little endian values" do
     test "so mixes properly signed ones (4 bytes)" do
       caps = [
-        {1, 16000, :s16le},
-        {1, 16000, :s32le},
-        {1, 44100, :s16le},
-        {2, 16000, :s16le}
+        {1, 16_000, :s16le},
+        {1, 16_000, :s32le},
+        {1, 44_100, :s16le},
+        {2, 16_000, :s16le}
       ]
 
       buffers = [<<6, 80, 255, 255>>, <<250, 30, 255, 255>>]
@@ -118,8 +118,8 @@ defmodule DoMixTest do
 
     test "so mixes properly signed ones (3 bytes)" do
       caps = [
-        {1, 16000, :s24le},
-        {1, 44100, :s24le}
+        {1, 16_000, :s24le},
+        {1, 44_100, :s24le}
       ]
 
       buffers = [<<6, 255, 255>>, <<30, 255, 255>>]
@@ -130,10 +130,10 @@ defmodule DoMixTest do
 
     test "so mixes properly unsigned ones (4 bytes)" do
       caps = [
-        {1, 16000, :u16le},
-        {1, 16000, :u32le},
-        {1, 44100, :u16le},
-        {2, 16000, :u16le}
+        {1, 16_000, :u16le},
+        {1, 16_000, :u32le},
+        {1, 44_100, :u16le},
+        {2, 16_000, :u16le}
       ]
 
       buffers = [<<6, 80, 150, 180>>, <<250, 30, 240, 50>>]
@@ -144,8 +144,8 @@ defmodule DoMixTest do
 
     test "so mixes properly unsigned ones (3 bytes)" do
       caps = [
-        {1, 16000, :u24le},
-        {1, 44100, :u24le}
+        {1, 16_000, :u24le},
+        {1, 44_100, :u24le}
       ]
 
       buffers = [<<250, 255, 120>>, <<30, 0, 115>>]
@@ -158,10 +158,10 @@ defmodule DoMixTest do
   describe "DoMix should work for big endian values" do
     test "so mixes properly signed ones (4 bytes)" do
       caps = [
-        {1, 16000, :s16be},
-        {1, 16000, :s32be},
-        {1, 44100, :s16be},
-        {2, 16000, :s16be}
+        {1, 16_000, :s16be},
+        {1, 16_000, :s32be},
+        {1, 44_100, :s16be},
+        {2, 16_000, :s16be}
       ]
 
       buffers = [<<255, 255, 80, 6>>, <<255, 255, 30, 250>>]
@@ -172,8 +172,8 @@ defmodule DoMixTest do
 
     test "so mixes properly signed ones (3 bytes)" do
       caps = [
-        {1, 16000, :s24be},
-        {1, 44100, :s24be}
+        {1, 16_000, :s24be},
+        {1, 44_100, :s24be}
       ]
 
       buffers = [<<255, 255, 6>>, <<255, 255, 30>>]
@@ -184,10 +184,10 @@ defmodule DoMixTest do
 
     test "so mixes properly unsigned ones (4 bytes)" do
       caps = [
-        {1, 16000, :u16be},
-        {1, 16000, :u32be},
-        {1, 44100, :u16be},
-        {2, 16000, :u16be}
+        {1, 16_000, :u16be},
+        {1, 16_000, :u32be},
+        {1, 44_100, :u16be},
+        {2, 16_000, :u16be}
       ]
 
       buffers = [<<180, 150, 80, 6>>, <<50, 240, 30, 250>>]
@@ -198,8 +198,8 @@ defmodule DoMixTest do
 
     test "so mixes properly unsigned ones (3 bytes)" do
       caps = [
-        {1, 16000, :u24be},
-        {1, 44100, :u24be}
+        {1, 16_000, :u24be},
+        {1, 44_100, :u24be}
       ]
 
       buffers = [<<120, 255, 250>>, <<115, 0, 30>>]
@@ -212,10 +212,10 @@ defmodule DoMixTest do
   describe "DoMix should work for values without endianness" do
     test "so mixes properly signed ones" do
       caps = [
-        {1, 16000, :s8},
-        {1, 44100, :s8},
-        {2, 16000, :s8},
-        {4, 16000, :s8}
+        {1, 16_000, :s8},
+        {1, 44_100, :s8},
+        {2, 16_000, :s8},
+        {4, 16_000, :s8}
       ]
 
       buffers = [<<15, 250, 215, 213>>, <<110, 255, 0, 37>>]
@@ -228,10 +228,10 @@ defmodule DoMixTest do
   describe "DoMix should clip properly" do
     test "samples in :s8 format" do
       caps = [
-        {1, 16000, :s8},
-        {1, 44100, :s8},
-        {2, 16000, :s8},
-        {4, 16000, :s8}
+        {1, 16_000, :s8},
+        {1, 44_100, :s8},
+        {2, 16_000, :s8},
+        {4, 16_000, :s8}
       ]
 
       buffers = [<<80, 64, 128, 190>>, <<80, 64, 128, 190>>]
@@ -242,10 +242,10 @@ defmodule DoMixTest do
 
     test "samples in :u8 format" do
       caps = [
-        {1, 16000, :u8},
-        {1, 44100, :u8},
-        {2, 16000, :u8},
-        {4, 16000, :u8}
+        {1, 16_000, :u8},
+        {1, 44_100, :u8},
+        {2, 16_000, :u8},
+        {4, 16_000, :u8}
       ]
 
       buffers = [<<255, 255, 128, 190>>, <<255, 1, 128, 190>>]
@@ -256,9 +256,9 @@ defmodule DoMixTest do
 
     test "samples in :s16le format" do
       caps = [
-        {1, 16000, :s16le},
-        {1, 44100, :s16le},
-        {2, 16000, :s16le}
+        {1, 16_000, :s16le},
+        {1, 44_100, :s16le},
+        {2, 16_000, :s16le}
       ]
 
       buffers = [<<255, 80, 255, 180>>, <<255, 80, 255, 180>>]
@@ -269,9 +269,9 @@ defmodule DoMixTest do
 
     test "samples in :u16le format" do
       caps = [
-        {1, 16000, :u16le},
-        {1, 44100, :u16le},
-        {2, 16000, :u16le}
+        {1, 16_000, :u16le},
+        {1, 44_100, :u16le},
+        {2, 16_000, :u16le}
       ]
 
       buffers = [<<255, 200, 0, 128>>, <<255, 150, 0, 128>>]
@@ -282,9 +282,9 @@ defmodule DoMixTest do
 
     test "samples in :s16be format" do
       caps = [
-        {1, 16000, :s16be},
-        {1, 44100, :s16be},
-        {2, 16000, :s16be}
+        {1, 16_000, :s16be},
+        {1, 44_100, :s16be},
+        {2, 16_000, :s16be}
       ]
 
       buffers = [<<80, 255, 180, 255>>, <<80, 255, 180, 255>>]
@@ -295,9 +295,9 @@ defmodule DoMixTest do
 
     test "samples in :u16be format" do
       caps = [
-        {1, 16000, :u16be},
-        {1, 44100, :u16be},
-        {2, 16000, :u16be}
+        {1, 16_000, :u16be},
+        {1, 44_100, :u16be},
+        {2, 16_000, :u16be}
       ]
 
       buffers = [<<200, 255, 128, 0>>, <<150, 255, 128, 0>>]
@@ -308,9 +308,9 @@ defmodule DoMixTest do
 
     test "samples in :s24le format" do
       caps = [
-        {1, 16000, :s24le},
-        {1, 44100, :s24le},
-        {2, 16000, :s24le}
+        {1, 16_000, :s24le},
+        {1, 44_100, :s24le},
+        {2, 16_000, :s24le}
       ]
 
       buffers = [<<255, 255, 127, 255, 255, 150>>, <<255, 255, 127, 255, 255, 150>>]
@@ -321,9 +321,9 @@ defmodule DoMixTest do
 
     test "samples in :u24le format" do
       caps = [
-        {1, 16000, :u24le},
-        {1, 44100, :u24le},
-        {2, 16000, :u24le}
+        {1, 16_000, :u24le},
+        {1, 44_100, :u24le},
+        {2, 16_000, :u24le}
       ]
 
       buffers = [<<1, 0, 0, 255, 255, 255>>, <<255, 255, 255, 255, 255, 255>>]
@@ -334,9 +334,9 @@ defmodule DoMixTest do
 
     test "samples in :s24be format" do
       caps = [
-        {1, 16000, :s24be},
-        {1, 44100, :s24be},
-        {2, 16000, :s24be}
+        {1, 16_000, :s24be},
+        {1, 44_100, :s24be},
+        {2, 16_000, :s24be}
       ]
 
       buffers = [<<127, 255, 255, 150, 255, 255>>, <<127, 255, 255, 150, 255, 255>>]
@@ -347,9 +347,9 @@ defmodule DoMixTest do
 
     test "samples in :u24be format" do
       caps = [
-        {1, 16000, :u24be},
-        {1, 44100, :u24be},
-        {2, 16000, :u24be}
+        {1, 16_000, :u24be},
+        {1, 44_100, :u24be},
+        {2, 16_000, :u24be}
       ]
 
       buffers = [<<0, 0, 1, 255, 255, 255>>, <<255, 255, 255, 255, 255, 255>>]
@@ -360,9 +360,9 @@ defmodule DoMixTest do
 
     test "samples in :s32le format" do
       caps = [
-        {1, 16000, :s32le},
-        {1, 44100, :s32le},
-        {2, 16000, :s32le}
+        {1, 16_000, :s32le},
+        {1, 44_100, :s32le},
+        {2, 16_000, :s32le}
       ]
 
       buffers = [
@@ -377,9 +377,9 @@ defmodule DoMixTest do
 
     test "samples in :u32le format" do
       caps = [
-        {1, 16000, :u32le},
-        {1, 44100, :u32le},
-        {2, 16000, :u32le}
+        {1, 16_000, :u32le},
+        {1, 44_100, :u32le},
+        {2, 16_000, :u32le}
       ]
 
       buffers = [
@@ -394,9 +394,9 @@ defmodule DoMixTest do
 
     test "samples in :s32be format" do
       caps = [
-        {1, 16000, :s32be},
-        {1, 44100, :s32be},
-        {2, 16000, :s32be}
+        {1, 16_000, :s32be},
+        {1, 44_100, :s32be},
+        {2, 16_000, :s32be}
       ]
 
       buffers = [
@@ -411,9 +411,9 @@ defmodule DoMixTest do
 
     test "samples in :u32be format" do
       caps = [
-        {1, 16000, :u32be},
-        {1, 44100, :u32be},
-        {2, 16000, :u32be}
+        {1, 16_000, :u32be},
+        {1, 44_100, :u32be},
+        {2, 16_000, :u32be}
       ]
 
       buffers = [

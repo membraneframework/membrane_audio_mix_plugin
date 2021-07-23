@@ -32,10 +32,8 @@ defmodule Membrane.AudioMixer.Mixfile do
 
   defp deps do
     [
-      {:membrane_core, "~> 0.7.0", override: true},
-      {:membrane_caps_audio_raw, "~> 0.3.0", override: true},
-      {:espec, "~> 1.1.2", only: :test},
-      {:qex, "~> 0.3"},
+      {:membrane_core, "~> 0.7.0"},
+      {:membrane_caps_audio_raw, "~> 0.4.0"},
       {:bunch, "~> 1.0"},
       {:ex_doc, "~> 0.24", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0.0", only: :dev, runtime: false},

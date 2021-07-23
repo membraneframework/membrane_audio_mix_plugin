@@ -72,7 +72,7 @@ defmodule Membrane.AudioMixer.DoMix do
       binaries
       |> Enum.flat_map(fn
         <<chunk::binary-size(chunk_size)>> <> rest -> [{chunk, rest}]
-        _ -> []
+        _binary -> []
       end)
       |> Enum.unzip()
 
@@ -82,7 +82,7 @@ defmodule Membrane.AudioMixer.DoMix do
         |> Enum.reverse()
         |> IO.iodata_to_binary()
 
-      _ ->
+      _chunks ->
         zip_longest_binary_by(rests, chunk_size, zipper, [zipper.(chunks) | acc])
     end
   end

@@ -128,7 +128,7 @@ defmodule Membrane.AudioMixer do
         %{queue: <<>>} ->
           Bunch.Access.delete_in(state, [:pads, pad])
 
-        _ ->
+        _state ->
           Bunch.Access.update_in(
             state,
             [:pads, pad],
