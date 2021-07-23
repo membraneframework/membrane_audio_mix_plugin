@@ -369,6 +369,7 @@ defmodule DoMixTest do
         <<255, 255, 255, 100, 255, 255, 255, 180>>,
         <<255, 255, 255, 100, 255, 255, 255, 180>>
       ]
+
       reference = <<255, 255, 255, 127, 0, 0, 0, 128>>
 
       test_for_caps(caps, buffers, reference)
@@ -385,6 +386,7 @@ defmodule DoMixTest do
         <<255, 255, 255, 200, 255, 255, 255, 255>>,
         <<255, 255, 255, 200, 1, 0, 0, 0>>
       ]
+
       reference = <<255, 255, 255, 255, 255, 255, 255, 255>>
 
       test_for_caps(caps, buffers, reference)
@@ -401,6 +403,7 @@ defmodule DoMixTest do
         <<100, 255, 255, 255, 180, 255, 255, 255>>,
         <<100, 255, 255, 255, 180, 255, 255, 255>>
       ]
+
       reference = <<127, 255, 255, 255, 128, 0, 0, 0>>
 
       test_for_caps(caps, buffers, reference)
@@ -417,6 +420,7 @@ defmodule DoMixTest do
         <<200, 255, 255, 255, 255, 255, 255, 255>>,
         <<200, 255, 255, 255, 0, 0, 0, 1>>
       ]
+
       reference = <<255, 255, 255, 255, 255, 255, 255, 255>>
 
       test_for_caps(caps, buffers, reference)

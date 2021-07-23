@@ -30,6 +30,8 @@ option is different than nil).
 Input pads can have offset - it tells how much silence should be added before first sample
 from that pad. Offset have to be positive.
 
+Mixing tested only for integer audio formats.
+
 ## Sample usage
 
 ```elixir

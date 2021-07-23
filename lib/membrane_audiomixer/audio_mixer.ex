@@ -9,12 +9,11 @@ defmodule Membrane.AudioMixer do
   Input pads can have offset - it tells how much silence should be added before first sample
   from that pad. Offset have to be positive.
 
-  Mixer mixes only raw audio (LPCM), so some parser may be needed to precede it in pipeline.
+  Mixer mixes only raw audio (PCM), so some parser may be needed to precede it in pipeline.
   """
 
   use Membrane.Filter
   use Bunch
-  use Membrane.Log, tags: :membrane_audio_mixer
 
   alias Membrane.AudioMixer.DoMix
   alias Membrane.Buffer
@@ -93,7 +92,13 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_demand(:output, buffers_count, :buffers, _context, %{frames_per_buffer: frames, caps: caps} = state) do
+  def handle_demand(
+        :output,
+        buffers_count,
+        :buffers,
+        _context,
+        %{frames_per_buffer: frames, caps: caps} = state
+      ) do
     size = buffers_count * Caps.frames_to_bytes(frames, caps)
 
     do_handle_demand(size, state)
@@ -101,8 +106,6 @@ defmodule Membrane.AudioMixer do
 
   @impl true
   def handle_start_of_stream(pad, context, state) do
-    info("mixer start of stream #{inspect(pad)}")
-
     offset = context.pads[pad].options.offset
     silence = Caps.sound_of_silence(state.caps, offset)
 
@@ -120,12 +123,11 @@ defmodule Membrane.AudioMixer do
 
   @impl true
   def handle_end_of_stream(pad, _context, state) do
-    info("mixer end of stream #{inspect(pad)}")
-
     state =
       case Bunch.Access.get_in(state, [:pads, pad]) do
         %{queue: <<>>} ->
           Bunch.Access.delete_in(state, [:pads, pad])
+
         _ ->
           Bunch.Access.update_in(
             state,
@@ -154,14 +156,19 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_process(pad, %Buffer{payload: payload} = _buffer, _context, %{caps: caps, pads: pads} = state) do
+  def handle_process(
+        pad,
+        %Buffer{payload: payload} = _buffer,
+        _context,
+        %{caps: caps, pads: pads} = state
+      ) do
     time_frame = Caps.frame_size(caps)
 
     {size, pads} =
       Bunch.Access.get_and_update_in(
         pads,
         [pad, :queue],
-        &{byte_size(&1), &1 <> payload}
+        &{byte_size(&1 <> payload), &1 <> payload}
       )
 
     if size >= time_frame do
