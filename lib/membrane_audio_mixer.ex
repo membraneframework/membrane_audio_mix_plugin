@@ -4,10 +4,10 @@ defmodule Membrane.AudioMixer do
 
   Audio format can be set as an element option or received through caps from input pads. All
   received caps have to be identical and match ones in element option (if that option is
-  different than nil).
+  different from `nil`).
 
   Input pads can have offset - it tells how much silence should be added before first sample
-  from that pad. Offset have to be positive.
+  from that pad. Offset has to be positive.
 
   Mixer mixes only raw audio (PCM), so some parser may be needed to precede it in pipeline.
   """
@@ -19,6 +19,8 @@ defmodule Membrane.AudioMixer do
   alias Membrane.Buffer
   alias Membrane.Caps.Audio.Raw, as: Caps
   alias Membrane.Time
+
+  require Membrane.Logger
 
   def_options caps: [
                 type: :struct,
@@ -87,6 +89,15 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
+  def handle_prepared_to_playing(_context, %{caps: %Caps{} = caps} = state) do
+    {{:ok, caps: {:output, caps}}, state}
+  end
+
+  def handle_prepared_to_playing(_context, %{caps: nil} = state) do
+    {:ok, state}
+  end
+
+  @impl true
   def handle_demand(:output, size, :bytes, _context, state) do
     do_handle_demand(size, state)
   end
@@ -99,9 +110,15 @@ defmodule Membrane.AudioMixer do
         _context,
         %{frames_per_buffer: frames, caps: caps} = state
       ) do
-    size = buffers_count * Caps.frames_to_bytes(frames, caps)
+    case caps do
+      nil ->
+        {:ok, state}
 
-    do_handle_demand(size, state)
+      _caps ->
+        size = buffers_count * Caps.frames_to_bytes(frames, caps)
+
+        do_handle_demand(size, state)
+    end
   end
 
   @impl true
@@ -116,9 +133,9 @@ defmodule Membrane.AudioMixer do
         &%{&1 | queue: silence}
       )
 
-    demand = get_default_demand(state)
+    demand_fun = &max(0, &1 - byte_size(silence))
 
-    {{:ok, demand: {pad, demand}}, state}
+    {{:ok, demand: {pad, demand_fun}}, state}
   end
 
   @impl true
@@ -136,7 +153,7 @@ defmodule Membrane.AudioMixer do
           )
       end
 
-    {buffer, state} = process(state)
+    {buffer, state} = mix_and_get_buffer(state)
 
     all_streams_ended =
       state.pads
@@ -151,7 +168,9 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_event(_pad, _event, _context, state) do
+  def handle_event(pad, event, _context, state) do
+    Membrane.Logger.debug("Received event #{inspect(event)} on pad #{inspect(pad)}")
+
     {:ok, state}
   end
 
@@ -172,7 +191,7 @@ defmodule Membrane.AudioMixer do
       )
 
     if size >= time_frame do
-      {buffer, state} = process(%{state | pads: pads})
+      {buffer, state} = mix_and_get_buffer(%{state | pads: pads})
       {{:ok, buffer: buffer}, state}
     else
       {{:ok, redemand: :output}, %{state | pads: pads}}
@@ -180,25 +199,21 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_caps(:input, caps, _context, state) do
-    cond do
-      state.caps == nil ->
+  def handle_caps(pad, caps, _context, state) do
+    case state.caps do
+      nil ->
         state = %{state | caps: caps}
-        {{:ok, caps: {:output, caps}}, state}
+        {{:ok, caps: {:output, caps}, redemand: :output}, state}
 
-      state.caps == caps ->
+      ^caps ->
         {:ok, state}
 
-      true ->
+      _invalid_caps ->
         raise(
           RuntimeError,
-          "incompatible audio formats: they should be identical on all pads and match caps provided as element option"
+          "received invalid caps on pad #{inspect(pad)}, expected: #{inspect(state.caps)}, got: #{inspect(caps)}"
         )
     end
-  end
-
-  defp get_default_demand(%{caps: caps} = _state) do
-    Caps.time_to_bytes(500, caps)
   end
 
   defp do_handle_demand(size, %{pads: pads} = state) do
@@ -209,7 +224,7 @@ defmodule Membrane.AudioMixer do
           demand_size =
             queue
             |> byte_size()
-            |> then(fn s -> max(0, size - s) end)
+            |> then(&max(0, size - &1))
 
           {:demand, {pad, demand_size}}
         end
@@ -218,9 +233,9 @@ defmodule Membrane.AudioMixer do
     {{:ok, demands}, state}
   end
 
-  defp process(%{caps: caps, pads: pads} = state) do
+  defp mix_and_get_buffer(%{caps: caps, pads: pads} = state) do
     time_frame = Caps.frame_size(caps)
-    mix_size = mix_size(pads, time_frame)
+    mix_size = get_mix_size(pads, time_frame)
 
     {payload, state} =
       if mix_size >= time_frame do
@@ -238,7 +253,7 @@ defmodule Membrane.AudioMixer do
     {buffer, state}
   end
 
-  defp mix_size(pads, time_frame) do
+  defp get_mix_size(pads, time_frame) do
     pads
     |> Enum.map(fn {_pad, %{queue: queue}} -> byte_size(queue) end)
     |> Enum.min(fn -> 0 end)
@@ -252,10 +267,7 @@ defmodule Membrane.AudioMixer do
   end
 
   defp mix(pads, mix_size, _caps) when map_size(pads) == 1 do
-    {pad, data} =
-      pads
-      |> Map.to_list()
-      |> hd()
+    [{pad, data}] = Map.to_list(pads)
 
     <<payload::binary-size(mix_size)>> <> queue = data.queue
 
@@ -263,19 +275,16 @@ defmodule Membrane.AudioMixer do
   end
 
   defp mix(pads, mix_size, caps) do
-    {payloads, pads} =
+    {payloads, pads_list} =
       pads
       |> Enum.map(fn
         {pad, %{queue: <<payload::binary-size(mix_size)>> <> queue} = data} ->
           {payload, {pad, %{data | queue: queue}}}
-
-        {pad, %{queue: payload} = data} ->
-          {payload, {pad, %{data | queue: <<>>}}}
       end)
       |> Enum.unzip()
 
     payload = DoMix.mix(payloads, caps)
-    pads = Map.new(pads)
+    pads = Map.new(pads_list)
 
     {payload, pads}
   end

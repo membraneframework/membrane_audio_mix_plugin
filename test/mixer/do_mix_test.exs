@@ -1,4 +1,4 @@
-defmodule DoMixTest do
+defmodule Membrane.AudioMixer.DoMixTest do
   @moduledoc """
   Tests for DoMix module. It contatins only one public function - `mix(buffers, caps)`, so tests
   check output of the mixing for serveral formats.
@@ -8,7 +8,7 @@ defmodule DoMixTest do
   which the test did not pass.
   """
 
-  use ExUnit.Case
+  use ExUnit.Case, async: true
 
   import Membrane.AudioMixer.DoMix
 

@@ -18,19 +18,22 @@ Add the following line to your `deps` in `mix.exs`. Run `mix deps.get`.
 
 ## Description
 
-Provided element add samples from all pads and clip the result to maximum value for given format
-to avoid overflow.
+Provided element add samples from all pads and clip the result to the maximum value for given 
+format to avoid overflow.
 
-Mixer mixes only raw audio (PCM), so some parser may be needed to precede it in pipeline.
+The Mixer mixes only raw audio (PCM), so some parser may be needed to precede it in pipeline.
 
 Audio format can be set as an element option or received through caps from input pads. All
 caps received from input pads have to be identical and match ones in element option (if that 
-option is different than nil).
+option is different from `nil`).
 
 Input pads can have offset - it tells how much silence should be added before first sample
-from that pad. Offset have to be positive.
+from that pad. Offset has to be positive.
 
-Mixing tested only for integer audio formats.
+All inputs into the mixer have to be added before starting pipeline and should not be changed
+during mixer's work.
+
+Mixing is tested only for integer audio formats.
 
 ## Sample usage
 
@@ -45,14 +48,14 @@ defmodule Mixing.Pipeline do
       file_src_2: %Membrane.File.Source{location: "/tmp/input_2.raw"},
       mixer: %Membrane.AudioMixer{
         caps: %Caps{
-              channels: 1,
-              sample_rate: 16_000,
-              format: :s16le
-            }
+          channels: 1,
+          sample_rate: 16_000,
+          format: :s16le
+        }
       },
       converter: %Membrane.FFmpeg.SWResample.Converter{
-        input_caps: %Caps{channels: 1, sample_rate: 16_000, format: :s16le},
-        output_caps: %Caps{channels: 2, sample_rate: 48_000, format: :s16le}
+        input_caps: %Membrane.Caps.Audio.Raw{channels: 1, sample_rate: 16_000, format: :s16le},
+        output_caps: %Membrane.Caps.Audio.Raw{channels: 2, sample_rate: 48_000, format: :s16le}
       },
       player: Membrane.PortAudio.Sink
     ]
@@ -62,10 +65,9 @@ defmodule Mixing.Pipeline do
       |> to(:mixer)
       |> to(:converter)
       |> to(:player),
-
       link(:file_src_2)
       |> via_in(:input, options: [offset: Membrane.Time.milliseconds(5000)])
-      |> to(:mixer),
+      |> to(:mixer)
     ]
 
     {{:ok, spec: %ParentSpec{children: children, links: links}}, %{}}
