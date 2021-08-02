@@ -1,34 +1,66 @@
-defmodule Membrane.Element.AudioMixer.Mixfile do
+defmodule Membrane.AudioMixer.Mixfile do
   use Mix.Project
 
+  @version "0.1.0"
+  @github_url "https://github.com/membraneframework/membrane_audio_mixer_plugin"
+
   def project do
-    [app: :membrane_element_audiomixer,
-     compilers: Mix.compilers,
-     version: "0.0.1",
-     elixir: "~> 1.3",
-     elixirc_paths: elixirc_paths(Mix.env),
-     description: "Membrane Multimedia Framework (AudioConvert Element)",
-     maintainers: ["Mateusz Front"],
-     licenses: ["LGPL"],
-     name: "Membrane Element: AudioMixer",
-     source_url: "https://github.com/membraneframework/membrane-element-audiomixer",
-     deps: deps()]
+    [
+      app: :membrane_audio_mixer_plugin,
+      version: @version,
+      elixir: "~> 1.12",
+      compilers: Mix.compilers(),
+      elixirc_paths: elixirc_paths(Mix.env()),
+      start_permanent: Mix.env() == :prod,
+      deps: deps(),
+      description: "Plugin performing raw audio mixing.",
+      package: package(),
+      name: "Membrane Audio Mixer plugin",
+      source_url: @github_url,
+      homepage_url: "https://membraneframework.org",
+      docs: docs()
+    ]
   end
 
   def application do
-    [extra_applications: [
-      ], mod: {Membrane.Element.AudioMixer, []}]
+    [
+      extra_applications: []
+    ]
   end
 
-  defp elixirc_paths(_),     do: ["lib",]
+  defp elixirc_paths(_), do: ["lib"]
 
   defp deps do
     [
-      {:membrane_core, git: "git@github.com:membraneframework/membrane-core.git"},
-      {:membrane_caps_audio_raw, git: "git@github.com:membraneframework/membrane-caps-audio-raw.git"},
-      {:espec, "~> 1.1.2", only: :test},
-      {:ex_doc, "~> 0.14", only: :dev},
-      {:qex, "~> 0.3"},
+      {:membrane_core, "~> 0.7.0"},
+      {:membrane_caps_audio_raw, "~> 0.4.0"},
+      {:bunch, "~> 1.0"},
+      {:ex_doc, "~> 0.24", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.0.0", only: :dev, runtime: false},
+      {:credo, "~> 1.5", only: :dev, runtime: false},
+      {:membrane_file_plugin, "~> 0.6.0", only: :test},
+      {:membrane_mp3_mad_plugin, "~> 0.7.0", only: :test}
+    ]
+  end
+
+  defp package do
+    [
+      maintainers: ["Membrane Team"],
+      licenses: ["Apache 2.0"],
+      links: %{
+        "GitHub" => @github_url,
+        "Membrane Framework Homepage" => "https://membraneframework.org"
+      },
+      files: ["lib", "mix.exs", "README*", "LICENSE*", ".formatter.exs"]
+    ]
+  end
+
+  defp docs do
+    [
+      main: "readme",
+      extras: ["README.md", "LICENSE"],
+      source_ref: "v#{@version}",
+      nest_modules_by_prefix: [Membrane.AudioMixer]
     ]
   end
 end
