@@ -47,7 +47,7 @@ defmodule Mixing.Pipeline do
       file_src_1: %Membrane.File.Source{location: "/tmp/input_1.raw"},
       file_src_2: %Membrane.File.Source{location: "/tmp/input_2.raw"},
       mixer: %Membrane.AudioMixer{
-        caps: %Caps{
+        caps: %Membrane.Caps.Audio.Raw{
           channels: 1,
           sample_rate: 16_000,
           format: :s16le
