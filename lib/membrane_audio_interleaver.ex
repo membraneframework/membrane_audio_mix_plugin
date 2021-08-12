@@ -5,7 +5,6 @@ defmodule Membrane.AudioInterleaver do
   use Membrane.Filter
   use Bunch
 
-  alias Membrane.AudioMixer.DoMix
   alias Membrane.Buffer
   alias Membrane.Caps.Audio.Raw, as: Caps
 
@@ -162,7 +161,7 @@ defmodule Membrane.AudioInterleaver do
         _context,
         %{caps: caps, pads: pads} = state
       ) do
-    time_frame = Caps.frame_size(caps)
+    sample_size = Caps.sample_size(caps)
 
     {size, pads} =
       Bunch.Access.get_and_update_in(
@@ -173,7 +172,7 @@ defmodule Membrane.AudioInterleaver do
 
     state = %{state | pads: pads}
 
-    if size >= time_frame do
+    if size >= sample_size do
       case(try_interleave(state)) do
         {:ok, {buffer, state}} -> {{:ok, buffer: buffer}, state}
         {:empty, _} -> {:ok, state}
@@ -222,12 +221,15 @@ defmodule Membrane.AudioInterleaver do
   # TODO return {payload, state} and another function to_buffer
   defp try_interleave(%{caps: caps, pads: pads} = state) do
     # TODO frame_size -> sample_size
-    time_frame = Caps.frame_size(caps)
-    min_length = min_queue_length(pads, time_frame)
+    sample_size = Caps.sample_size(caps)
 
-    if min_length >= time_frame do
+    min_length =
+      min_queue_length(pads)
+      |> trunc_to_whole_samples(sample_size)
+
+    if min_length >= sample_size do
       {payload, pads} = interleave(min_length, caps, pads, state.order)
-      pads = remove_finished_pads(pads, time_frame)
+      pads = remove_finished_pads(pads, sample_size)
 
       Membrane.Logger.debug("#{inspect(byte_size(payload))}")
       buffer = {:output, %Buffer{payload: payload}}
@@ -238,30 +240,83 @@ defmodule Membrane.AudioInterleaver do
     end
   end
 
-  defp interleave(size, caps, pads, _order) when map_size(pads) == 1 do
+  defp interleave(size, _caps, pads, _order) when map_size(pads) == 1 do
+    [{pad, data}] = Map.to_list(pads)
+
+    <<payload::binary-size(size)>> <> remaining_queue = data.queue
+    pads = %{pad => %{data | queue: remaining_queue}}
+    {payload, pads}
   end
 
   defp interleave(size, caps, pads, order) do
+    pads_inorder =
+      order
+      |> Enum.map(fn nr -> {Membrane.Pad, :input, nr} end)
+      |> Enum.map(fn pad -> {pad, pads[pad]} end)
+      |> Enum.to_list()
+
+    {payloads, pads_list} =
+      pads_inorder
+      |> Enum.map(fn
+        {pad, %{queue: <<payload::binary-size(size)>> <> queue} = data} ->
+          {payload, {pad, %{data | queue: queue}}}
+      end)
+      |> Enum.unzip()
+
+    [h | _] = payloads
+    IO.inspect(h)
+
+    payload = do_interleave(payloads, caps)
+    pads = Map.new(pads_list)
+
+    {payload, pads}
+  end
+
+  defp do_interleave(payloads, caps, acc \\ <<>>)
+
+  defp do_interleave([], caps, acc) do
+    acc
+  end
+
+  # TODO implement
+  defp do_interleave(payloads, caps, acc) do
+    sample_size = Caps.sample_size(caps)
+
+    [heads, rests] =
+      payloads
+      |> Enum.map(fn b ->
+        <<head::binary-size(sample_size)>> <> rest = b
+        [head, rest]
+      end)
+      |> Enum.zip()
+
+    IO.inspect(heads |> Tuple.to_list())
+
+    do_interleave_short(payloads)
+  end
+
+  defp do_interleave_short(samples) do
+    :erlang.list_to_binary(samples)
   end
 
   # Returns minimum number of bytes present in all queues
-  defp min_queue_length(pads, time_frame) do
+  defp min_queue_length(pads) do
     pads
     |> Enum.map(fn {_pad, %{queue: queue}} -> byte_size(queue) end)
     |> Enum.min(fn -> 0 end)
-    |> int_part(time_frame)
   end
 
-  # Returns the biggest multiple of `divisor` that is not bigger than `number`
-  defp int_part(number, divisor) when is_integer(number) and is_integer(divisor) do
-    rest = rem(number, divisor)
-    number - rest
+  # Returns the biggest multiple of `sample_size` that is not bigger than `size`
+  defp trunc_to_whole_samples(size, sample_size)
+       when is_integer(size) and is_integer(sample_size) do
+    rest = rem(size, sample_size)
+    size - rest
   end
 
-  defp remove_finished_pads(pads, time_frame) do
+  defp remove_finished_pads(pads, sample_size) do
     pads
     |> Enum.flat_map(fn
-      {_pad, %{queue: queue, stream_ended: true}} when byte_size(queue) < time_frame -> []
+      {_pad, %{queue: queue, stream_ended: true}} when byte_size(queue) < sample_size -> []
       pad_data -> [pad_data]
     end)
     |> Map.new()
