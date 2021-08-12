@@ -1,13 +1,13 @@
 defmodule Membrane.AudioInterleaver do
   @moduledoc """
-  TODO
   """
+
   use Membrane.Filter
   use Bunch
 
+  alias Membrane.AudioMixer.DoMix
   alias Membrane.Buffer
   alias Membrane.Caps.Audio.Raw, as: Caps
-  alias Membrane.Time
 
   require Membrane.Logger
 
@@ -28,6 +28,15 @@ defmodule Membrane.AudioInterleaver do
                 Used when converting demand from buffers into bytes.
                 """,
                 default: 2048
+              ],
+              order: [
+                # TODO list?
+                type: :list,
+                spec: list(integer),
+                description: """
+                Order in which channels should be interleaved
+                """,
+                default: nil
               ]
 
   def_output_pad :output,
@@ -39,14 +48,7 @@ defmodule Membrane.AudioInterleaver do
     mode: :pull,
     availability: :on_request,
     demand_unit: :bytes,
-    caps: Caps,
-    options: [
-      offset: [
-        spec: Time.t(),
-        default: 0,
-        description: "Offset of the input audio at the pad."
-      ]
-    ]
+    caps: Caps
 
   @impl true
   def handle_init(%__MODULE__{} = options) do
@@ -54,6 +56,7 @@ defmodule Membrane.AudioInterleaver do
       options
       |> Map.from_struct()
       |> Map.put(:pads, %{})
+      |> Map.put(:channels, length(options.order))
 
     {:ok, state}
   end
@@ -77,17 +80,24 @@ defmodule Membrane.AudioInterleaver do
     {:ok, state}
   end
 
+  # todo here count channels, maybe default order? (sorted ids)
+
   @impl true
   def handle_prepared_to_playing(_context, %{caps: %Caps{} = caps} = state) do
+    {{:ok, caps: {:output, caps}}, state}
   end
 
   def handle_prepared_to_playing(_context, %{caps: nil} = state) do
+    {:ok, state}
   end
 
   @impl true
-  def handle_demand(:output, size, :bytes, _context, state) do
+  def handle_demand(:output, size, :bytes, _context, %{channels: channels} = state) do
+    Membrane.Logger.debug("handle bytes2")
+    do_handle_demand(div(size, channels), state)
   end
 
+  # TODO
   @impl true
   def handle_demand(
         :output,
@@ -96,14 +106,46 @@ defmodule Membrane.AudioInterleaver do
         _context,
         %{frames_per_buffer: frames, caps: caps} = state
       ) do
-  end
+    Membrane.Logger.debug("handle buffer")
 
-  @impl true
-  def handle_start_of_stream(pad, context, state) do
+    case caps do
+      nil ->
+        {:ok, state}
+
+      _caps ->
+        size = buffers_count * Caps.frames_to_bytes(frames, caps)
+
+        do_handle_demand(size, state)
+    end
   end
 
   @impl true
   def handle_end_of_stream(pad, _context, state) do
+    state =
+      case Bunch.Access.get_in(state, [:pads, pad]) do
+        %{queue: <<>>} ->
+          Bunch.Access.delete_in(state, [:pads, pad])
+
+        _state ->
+          Bunch.Access.update_in(
+            state,
+            [:pads, pad],
+            &%{&1 | stream_ended: true}
+          )
+      end
+
+    {_, {buffer, state}} = try_interleave(state)
+
+    all_streams_ended =
+      state.pads
+      |> Enum.map(fn {_pad, %{stream_ended: stream_ended}} -> stream_ended end)
+      |> Enum.all?()
+
+    if all_streams_ended do
+      {{:ok, buffer: buffer, end_of_stream: :output}, state}
+    else
+      {{:ok, buffer: buffer}, state}
+    end
   end
 
   @impl true
@@ -120,9 +162,108 @@ defmodule Membrane.AudioInterleaver do
         _context,
         %{caps: caps, pads: pads} = state
       ) do
+    time_frame = Caps.frame_size(caps)
+
+    {size, pads} =
+      Bunch.Access.get_and_update_in(
+        pads,
+        [pad, :queue],
+        &{byte_size(&1 <> payload), &1 <> payload}
+      )
+
+    state = %{state | pads: pads}
+
+    if size >= time_frame do
+      case(try_interleave(state)) do
+        {:ok, {buffer, state}} -> {{:ok, buffer: buffer}, state}
+        {:empty, _} -> {:ok, state}
+      end
+    else
+      Membrane.Logger.debug("redemand")
+      {{:ok, redemand: :output}, state}
+    end
   end
 
   @impl true
   def handle_caps(pad, caps, _context, state) do
+    case state.caps do
+      nil ->
+        state = %{state | caps: caps}
+        {{:ok, caps: {:output, caps}, redemand: :output}, state}
+
+      ^caps ->
+        {:ok, state}
+
+      _invalid_caps ->
+        raise(
+          RuntimeError,
+          "received invalid caps on pad #{inspect(pad)}, expected: #{inspect(state.caps)}, got: #{inspect(caps)}"
+        )
+    end
+  end
+
+  defp do_handle_demand(size, %{pads: pads} = state) do
+    demands =
+      Enum.map(
+        pads,
+        fn {pad, %{queue: queue}} ->
+          demand_size =
+            queue
+            |> byte_size()
+            |> then(&max(0, size - &1))
+
+          {:demand, {pad, demand_size}}
+        end
+      )
+
+    {{:ok, demands}, state}
+  end
+
+  # TODO return {payload, state} and another function to_buffer
+  defp try_interleave(%{caps: caps, pads: pads} = state) do
+    # TODO frame_size -> sample_size
+    time_frame = Caps.frame_size(caps)
+    min_length = min_queue_length(pads, time_frame)
+
+    if min_length >= time_frame do
+      {payload, pads} = interleave(min_length, caps, pads, state.order)
+      pads = remove_finished_pads(pads, time_frame)
+
+      Membrane.Logger.debug("#{inspect(byte_size(payload))}")
+      buffer = {:output, %Buffer{payload: payload}}
+      {:ok, {buffer, %{state | pads: pads}}}
+    else
+      empty_buffer = {:output, %Buffer{payload: <<>>}}
+      {:empty, {empty_buffer, state}}
+    end
+  end
+
+  defp interleave(size, caps, pads, _order) when map_size(pads) == 1 do
+  end
+
+  defp interleave(size, caps, pads, order) do
+  end
+
+  # Returns minimum number of bytes present in all queues
+  defp min_queue_length(pads, time_frame) do
+    pads
+    |> Enum.map(fn {_pad, %{queue: queue}} -> byte_size(queue) end)
+    |> Enum.min(fn -> 0 end)
+    |> int_part(time_frame)
+  end
+
+  # Returns the biggest multiple of `divisor` that is not bigger than `number`
+  defp int_part(number, divisor) when is_integer(number) and is_integer(divisor) do
+    rest = rem(number, divisor)
+    number - rest
+  end
+
+  defp remove_finished_pads(pads, time_frame) do
+    pads
+    |> Enum.flat_map(fn
+      {_pad, %{queue: queue, stream_ended: true}} when byte_size(queue) < time_frame -> []
+      pad_data -> [pad_data]
+    end)
+    |> Map.new()
   end
 end
