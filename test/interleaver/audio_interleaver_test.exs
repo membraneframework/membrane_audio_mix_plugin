@@ -27,7 +27,23 @@ defmodule Membrane.AudioInterleaverTest do
   end
 
   test "interleave binaries" do
-    assert do_interleave([<<227, 2, 3, 4, 5, 6>>, <<7, 8, 9, 10, 11, 12>>], 2) ==
+    payload1 = <<227, 2, 3, 4, 5, 6>>
+    payload2 = <<7, 8, 9, 10, 11, 12>>
+    payload3 = <<10, 20, 30, 40, 50, 60>>
+
+    assert do_interleave([payload1, payload2], 2) ==
              <<227, 2, 7, 8, 3, 4, 9, 10, 5, 6, 11, 12>>
+
+    assert do_interleave(
+             [payload1, payload2, payload3],
+             2
+           ) ==
+             <<227, 2, 7, 8, 10, 20, 3, 4, 9, 10, 30, 40, 5, 6, 11, 12, 50, 60>>
+
+    assert do_interleave(
+             [payload1, payload2, payload3],
+             3
+           ) ==
+             <<227, 2, 3, 7, 8, 9, 10, 20, 30, 4, 5, 6, 10, 11, 12, 40, 50, 60>>
   end
 end
