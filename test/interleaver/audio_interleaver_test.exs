@@ -18,11 +18,16 @@ defmodule Membrane.AudioInterleaverTest do
 
   require Membrane.Logger
 
-  test "splits binaries in chunks" do
-    assert DoInterleave.split_in_chunks(<<1, 2, 3, 4>>, 2) == [<<1, 2>>, <<3, 4>>]
-    assert DoInterleave.split_in_chunks(<<1, 2, 3, 4>>, 3) == [<<1, 2, 3>>, <<4>>]
-    assert DoInterleave.split_in_chunks(<<1, 2, 3>>, 1) == [<<1>>, <<2>>, <<3>>]
-    assert DoInterleave.split_in_chunks(<<1>>, 1) == [<<1>>]
-    assert DoInterleave.split_in_chunks(<<>>, 1) == [<<>>]
+  test "splits binaries in reversed chunks" do
+    assert DoInterleave.to_chunks_reversed(<<1, 2, 3, 4>>, 2) == [<<3, 4>>, <<1, 2>>]
+    assert DoInterleave.to_chunks_reversed(<<1, 2, 3, 4>>, 3) == [<<4>>, <<1, 2, 3>>]
+    assert DoInterleave.to_chunks_reversed(<<1, 2, 3>>, 1) == [<<3>>, <<2>>, <<1>>]
+    assert DoInterleave.to_chunks_reversed(<<1>>, 1) == [<<1>>]
+    assert DoInterleave.to_chunks_reversed(<<>>, 1) == [<<>>]
+  end
+
+  test "interleave binaries" do
+    assert do_interleave([<<227, 2, 3, 4, 5, 6>>, <<7, 8, 9, 10, 11, 12>>], 2) ==
+             <<227, 2, 7, 8, 3, 4, 9, 10, 5, 6, 11, 12>>
   end
 end

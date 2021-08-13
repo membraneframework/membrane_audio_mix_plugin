@@ -10,6 +10,8 @@ defmodule Membrane.AudioMixer.DoInterleave do
   end
 
   def interleave(size, caps, pads, order) do
+    sample_size = Caps.sample_size(caps)
+
     pads_inorder =
       order
       |> Enum.map(fn nr -> {Membrane.Pad, :input, nr} end)
@@ -24,45 +26,40 @@ defmodule Membrane.AudioMixer.DoInterleave do
       end)
       |> Enum.unzip()
 
-    payload = do_interleave(payloads, caps)
+    payload = do_interleave(payloads, sample_size)
     pads = Map.new(pads_list)
 
     {payload, pads}
   end
 
-  def do_interleave(payloads, caps, acc \\ <<>>)
+  def do_interleave(payloads, sample_size)
 
-  def do_interleave([], caps, acc) do
-    acc
+  def do_interleave([], _sample_size) do
+    <<>>
   end
 
   # TODO implement
-  def do_interleave(payloads, caps, acc) do
-    sample_size = Caps.sample_size(caps)
-
-    [heads, rests] =
-      payloads
-      |> Enum.map(fn b ->
-        <<head::binary-size(sample_size)>> <> rest = b
-        [head, rest]
-      end)
-      |> Enum.zip()
-
-    heads = heads |> Tuple.to_list()
-    IO.inspect(heads)
-
-    do_interleave_short(payloads)
+  def do_interleave(payloads, sample_size) do
+    payloads
+    |> Enum.map(fn payload -> to_chunks_reversed(payload, sample_size) end)
+    |> Enum.zip_reduce([], fn elems, acc ->
+      elems = elems |> Enum.reduce(<<>>, fn x, acc -> acc <> x end)
+      [elems | acc]
+    end)
+    |> Enum.reverse()
+    |> Enum.reduce(<<>>, fn x, acc -> x <> acc end)
   end
 
-  def split_in_chunks(mbinary, chunk_size, acc \\ [])
+  @spec to_chunks_reversed(bitstring, pos_integer(), list()) :: list
+  def to_chunks_reversed(mbinary, chunk_size, acc \\ [])
 
-  def split_in_chunks(mbinary, chunk_size, acc) when byte_size(mbinary) <= chunk_size do
-    Enum.reverse([mbinary | acc])
+  def to_chunks_reversed(mbinary, chunk_size, acc) when byte_size(mbinary) <= chunk_size do
+    [mbinary | acc]
   end
 
-  def split_in_chunks(mbinary, chunk_size, acc) do
+  def to_chunks_reversed(mbinary, chunk_size, acc) do
     <<chunk::binary-size(chunk_size), rest::bitstring>> = mbinary
-    split_in_chunks(rest, chunk_size, [<<chunk::binary-size(chunk_size)>> | acc])
+    to_chunks_reversed(rest, chunk_size, [<<chunk::binary-size(chunk_size)>> | acc])
   end
 
   def do_interleave_short(samples) do
