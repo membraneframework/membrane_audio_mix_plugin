@@ -1,10 +1,13 @@
 defmodule Membrane.AudioInterleaver do
   @moduledoc """
+  TODO remove "rem finished pads"
+  -> then state not necessary to try_interleave?
   """
 
   use Membrane.Filter
   use Bunch
 
+  alias Membrane.AudioMixer.DoInterleave
   alias Membrane.Buffer
   alias Membrane.Caps.Audio.Raw, as: Caps
 
@@ -218,9 +221,7 @@ defmodule Membrane.AudioInterleaver do
     {{:ok, demands}, state}
   end
 
-  # TODO return {payload, state} and another function to_buffer
   defp try_interleave(%{caps: caps, pads: pads} = state) do
-    # TODO frame_size -> sample_size
     sample_size = Caps.sample_size(caps)
 
     min_length =
@@ -228,7 +229,7 @@ defmodule Membrane.AudioInterleaver do
       |> trunc_to_whole_samples(sample_size)
 
     if min_length >= sample_size do
-      {payload, pads} = interleave(min_length, caps, pads, state.order)
+      {payload, pads} = DoInterleave.interleave(min_length, caps, pads, state.order)
       pads = remove_finished_pads(pads, sample_size)
 
       Membrane.Logger.debug("#{inspect(byte_size(payload))}")
@@ -238,65 +239,6 @@ defmodule Membrane.AudioInterleaver do
       empty_buffer = {:output, %Buffer{payload: <<>>}}
       {:empty, {empty_buffer, state}}
     end
-  end
-
-  defp interleave(size, _caps, pads, _order) when map_size(pads) == 1 do
-    [{pad, data}] = Map.to_list(pads)
-
-    <<payload::binary-size(size)>> <> remaining_queue = data.queue
-    pads = %{pad => %{data | queue: remaining_queue}}
-    {payload, pads}
-  end
-
-  defp interleave(size, caps, pads, order) do
-    pads_inorder =
-      order
-      |> Enum.map(fn nr -> {Membrane.Pad, :input, nr} end)
-      |> Enum.map(fn pad -> {pad, pads[pad]} end)
-      |> Enum.to_list()
-
-    {payloads, pads_list} =
-      pads_inorder
-      |> Enum.map(fn
-        {pad, %{queue: <<payload::binary-size(size)>> <> queue} = data} ->
-          {payload, {pad, %{data | queue: queue}}}
-      end)
-      |> Enum.unzip()
-
-    [h | _] = payloads
-    IO.inspect(h)
-
-    payload = do_interleave(payloads, caps)
-    pads = Map.new(pads_list)
-
-    {payload, pads}
-  end
-
-  defp do_interleave(payloads, caps, acc \\ <<>>)
-
-  defp do_interleave([], caps, acc) do
-    acc
-  end
-
-  # TODO implement
-  defp do_interleave(payloads, caps, acc) do
-    sample_size = Caps.sample_size(caps)
-
-    [heads, rests] =
-      payloads
-      |> Enum.map(fn b ->
-        <<head::binary-size(sample_size)>> <> rest = b
-        [head, rest]
-      end)
-      |> Enum.zip()
-
-    IO.inspect(heads |> Tuple.to_list())
-
-    do_interleave_short(payloads)
-  end
-
-  defp do_interleave_short(samples) do
-    :erlang.list_to_binary(samples)
   end
 
   # Returns minimum number of bytes present in all queues
