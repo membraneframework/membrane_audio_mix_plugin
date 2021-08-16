@@ -1,6 +1,7 @@
 defmodule Membrane.AudioInterleaver do
   @moduledoc """
-  TODO
+  Element responsible for interleaving several mono audio streams into single interleaved stream.
+  All input streams should be in the same raw audio format, defined by 'caps' option.
   """
 
   use Membrane.Filter
@@ -77,10 +78,7 @@ defmodule Membrane.AudioInterleaver do
 
   @impl true
   def handle_pad_removed(pad, _context, state) do
-    IO.inspect(pad)
-    IO.inspect("removed")
     state = Bunch.Access.delete_in(state, [:pads, pad])
-
     {:ok, state}
   end
 

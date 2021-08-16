@@ -10,6 +10,7 @@ defmodule Membrane.AudioMixer.DoInterleave do
     {payload, pads}
   end
 
+  # take 'bytes_per_channel' from each queue and interleave them in given order
   def interleave(bytes_per_channel, caps, pads, order) do
     sample_size = Caps.sample_size(caps)
     pads_inorder = order_pads(pads, order)
