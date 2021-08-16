@@ -232,27 +232,27 @@ defmodule Membrane.AudioInterleaver do
     if active_pads < channels do
       Membrane.Logger.debug("no interleaving, channels: #{active_pads}")
       {:empty, {{:output, %Buffer{payload: <<>>}}, state}}
-    end
-
-    Membrane.Logger.debug("interleaving, channels: #{channels}")
-
-    sample_size = Caps.sample_size(caps)
-
-    min_length =
-      min_queue_length(pads)
-      |> trunc_to_whole_samples(sample_size)
-
-    Membrane.Logger.debug("min length: #{min_length}")
-
-    if min_length >= sample_size do
-      {payload, pads} = DoInterleave.interleave(min_length, caps, pads, state.order)
-      pads = remove_finished_pads(pads, sample_size)
-
-      buffer = {:output, %Buffer{payload: payload}}
-      {:ok, {buffer, %{state | pads: pads}}}
     else
-      empty_buffer = {:output, %Buffer{payload: <<>>}}
-      {:empty, {empty_buffer, state}}
+      Membrane.Logger.debug("interleaving, channels: #{channels}")
+
+      sample_size = Caps.sample_size(caps)
+
+      min_length =
+        min_queue_length(pads)
+        |> trunc_to_whole_samples(sample_size)
+
+      Membrane.Logger.debug("min length: #{min_length}")
+
+      if min_length >= sample_size do
+        {payload, pads} = DoInterleave.interleave(min_length, caps, pads, state.order)
+        pads = remove_finished_pads(pads, sample_size)
+
+        buffer = {:output, %Buffer{payload: payload}}
+        {:ok, {buffer, %{state | pads: pads}}}
+      else
+        empty_buffer = {:output, %Buffer{payload: <<>>}}
+        {:empty, {empty_buffer, state}}
+      end
     end
   end
 
