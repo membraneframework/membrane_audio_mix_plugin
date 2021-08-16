@@ -155,21 +155,14 @@ defmodule Membrane.AudioInterleaver do
         pad,
         %Buffer{payload: payload} = _buffer,
         _context,
-        %{caps: caps, pads: pads} = state
+        %{caps: caps} = state
       ) do
     if state.finished do
       {:ok, state}
     else
-      {queue_size, pads} =
-        Bunch.Access.get_and_update_in(
-          pads,
-          [pad, :queue],
-          &{byte_size(&1 <> payload), &1 <> payload}
-        )
+      {new_queue_size, state} = add_payload(payload, pad, state)
 
-      state = %{state | pads: pads}
-
-      if queue_size >= Caps.sample_size(caps) do
+      if new_queue_size >= Caps.sample_size(caps) do
         interleave_and_return(state)
       else
         {{:ok, redemand: :output}, state}
@@ -270,5 +263,17 @@ defmodule Membrane.AudioInterleaver do
       {_pad, %{queue: queue, stream_ended: true}} when byte_size(queue) < sample_size -> true
       _ -> false
     end)
+  end
+
+  # add payload to proper pad's queue
+  defp add_payload(payload, pad, %{pads: pads} = state) do
+    {new_queue_size, pads} =
+      Bunch.Access.get_and_update_in(
+        pads,
+        [pad, :queue],
+        &{byte_size(&1 <> payload), &1 <> payload}
+      )
+
+    {new_queue_size, %{state | pads: pads}}
   end
 end
