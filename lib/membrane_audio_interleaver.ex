@@ -1,7 +1,6 @@
 defmodule Membrane.AudioInterleaver do
   @moduledoc """
-  TODO remove "rem finished pads"
-  -> then state not necessary to try_interleave?
+  TODO
   """
 
   use Membrane.Filter
@@ -77,13 +76,14 @@ defmodule Membrane.AudioInterleaver do
 
   @impl true
   def handle_pad_removed(pad, _context, state) do
+    IO.inspect(pad)
+    IO.inspect("removed")
     state = Bunch.Access.delete_in(state, [:pads, pad])
 
     {:ok, state}
   end
 
-  # todo here count channels, maybe default order? (sorted ids)
-
+  # TODO here count channels, add default order (sorted ids)
   @impl true
   def handle_prepared_to_playing(_context, %{caps: %Caps{} = caps} = state) do
     {{:ok, caps: {:output, caps}}, state}
@@ -95,7 +95,6 @@ defmodule Membrane.AudioInterleaver do
 
   @impl true
   def handle_demand(:output, size, :bytes, _context, %{channels: channels} = state) do
-    Membrane.Logger.debug("handle bytes2")
     do_handle_demand(div(size, channels), state)
   end
 
@@ -108,8 +107,6 @@ defmodule Membrane.AudioInterleaver do
         _context,
         %{frames_per_buffer: frames, caps: caps} = state
       ) do
-    Membrane.Logger.debug("handle buffer")
-
     case caps do
       nil ->
         {:ok, state}
@@ -123,6 +120,8 @@ defmodule Membrane.AudioInterleaver do
 
   @impl true
   def handle_end_of_stream(pad, _context, state) do
+    IO.inspect(pad)
+
     state =
       case Bunch.Access.get_in(state, [:pads, pad]) do
         %{queue: <<>>} ->
@@ -142,6 +141,8 @@ defmodule Membrane.AudioInterleaver do
       state.pads
       |> Enum.map(fn {_pad, %{stream_ended: stream_ended}} -> stream_ended end)
       |> Enum.all?()
+
+    IO.inspect(all_streams_ended)
 
     if all_streams_ended do
       {{:ok, buffer: buffer, end_of_stream: :output}, state}
@@ -173,6 +174,10 @@ defmodule Membrane.AudioInterleaver do
         &{byte_size(&1 <> payload), &1 <> payload}
       )
 
+    Membrane.Logger.debug(pad)
+    # IO.inspect(pad)
+    # IO.inspect("process")
+    # IO.inspect("payload: #{byte_size(payload)}")
     state = %{state | pads: pads}
 
     if size >= sample_size do
@@ -221,18 +226,28 @@ defmodule Membrane.AudioInterleaver do
     {{:ok, demands}, state}
   end
 
-  defp try_interleave(%{caps: caps, pads: pads} = state) do
+  defp try_interleave(%{caps: caps, pads: pads, channels: channels} = state) do
+    active_pads = length(Map.keys(pads))
+
+    if active_pads < channels do
+      Membrane.Logger.debug("no interleaving, channels: #{active_pads}")
+      {:empty, {{:output, %Buffer{payload: <<>>}}, state}}
+    end
+
+    Membrane.Logger.debug("interleaving, channels: #{channels}")
+
     sample_size = Caps.sample_size(caps)
 
     min_length =
       min_queue_length(pads)
       |> trunc_to_whole_samples(sample_size)
 
+    Membrane.Logger.debug("min length: #{min_length}")
+
     if min_length >= sample_size do
       {payload, pads} = DoInterleave.interleave(min_length, caps, pads, state.order)
       pads = remove_finished_pads(pads, sample_size)
 
-      Membrane.Logger.debug("#{inspect(byte_size(payload))}")
       buffer = {:output, %Buffer{payload: payload}}
       {:ok, {buffer, %{state | pads: pads}}}
     else

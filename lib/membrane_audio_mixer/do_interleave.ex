@@ -52,9 +52,7 @@ defmodule Membrane.AudioMixer.DoInterleave do
     |> Enum.zip_reduce([], fn zipped_chunks, acc ->
       [join_binaries(zipped_chunks) | acc]
     end)
-    # reverse to concatenate smaller binary
-    |> Enum.reverse()
-    |> Enum.reduce(<<>>, &(&1 <> &2))
+    |> join_binaries()
   end
 
   # joins list of binaries into one binary
