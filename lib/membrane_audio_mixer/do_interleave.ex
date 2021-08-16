@@ -2,25 +2,23 @@ defmodule Membrane.AudioMixer.DoInterleave do
   alias Membrane.Caps.Audio.Raw, as: Caps
 
   @spec interleave(pos_integer(), Caps.t(), %{}, [integer()]) :: {any, map}
-  def interleave(size, _caps, pads, _order) when map_size(pads) == 1 do
+  def interleave(bytes_per_channel, _caps, pads, _order) when map_size(pads) == 1 do
     [{pad, data}] = Map.to_list(pads)
 
-    <<payload::binary-size(size)>> <> remaining_queue = data.queue
+    <<payload::binary-size(bytes_per_channel)>> <> remaining_queue = data.queue
     pads = %{pad => %{data | queue: remaining_queue}}
+
     {payload, pads}
   end
 
   # take 'bytes_per_channel' from each queue and interleave them in given order
   def interleave(bytes_per_channel, caps, pads, order) do
-    sample_size = Caps.sample_size(caps)
     pads_inorder = order_pads(pads, order)
-
     {payloads, pads_list} = get_payloads(bytes_per_channel, pads_inorder)
 
-    payload = do_interleave(payloads, sample_size)
-    pads = Map.new(pads_list)
+    payload = do_interleave(payloads, Caps.sample_size(caps))
 
-    {payload, pads}
+    {payload, Map.new(pads_list)}
   end
 
   defp order_pads(pads, order) do
