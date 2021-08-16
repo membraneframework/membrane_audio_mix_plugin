@@ -57,6 +57,7 @@ defmodule Membrane.AudioInterleaver do
       options
       |> Map.from_struct()
       |> Map.put(:pads, %{})
+      |> Map.put(:finished, false)
       |> Map.put(:channels, length(options.order))
 
     {:ok, state}
@@ -98,7 +99,6 @@ defmodule Membrane.AudioInterleaver do
     do_handle_demand(div(size, channels), state)
   end
 
-  # TODO
   @impl true
   def handle_demand(
         :output,
@@ -119,13 +119,14 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
-  def handle_end_of_stream(pad, _context, state) do
+  def handle_end_of_stream(pad, _context, %{caps: caps} = state) do
     IO.inspect(pad)
+    sample_size = Caps.sample_size(caps)
 
     state =
       case Bunch.Access.get_in(state, [:pads, pad]) do
-        %{queue: <<>>} ->
-          Bunch.Access.delete_in(state, [:pads, pad])
+        %{queue: queue} when byte_size(queue) < sample_size ->
+          %{state | finished: true}
 
         _state ->
           Bunch.Access.update_in(
@@ -135,19 +136,10 @@ defmodule Membrane.AudioInterleaver do
           )
       end
 
-    {_, {buffer, state}} = try_interleave(state)
-
-    all_streams_ended =
-      state.pads
-      |> Enum.map(fn {_pad, %{stream_ended: stream_ended}} -> stream_ended end)
-      |> Enum.all?()
-
-    IO.inspect(all_streams_ended)
-
-    if all_streams_ended do
-      {{:ok, buffer: buffer, end_of_stream: :output}, state}
+    if state.finished do
+      {{:ok, end_of_stream: :output}, state}
     else
-      {{:ok, buffer: buffer}, state}
+      interleave_and_return(state)
     end
   end
 
@@ -165,29 +157,23 @@ defmodule Membrane.AudioInterleaver do
         _context,
         %{caps: caps, pads: pads} = state
       ) do
-    sample_size = Caps.sample_size(caps)
-
-    {size, pads} =
-      Bunch.Access.get_and_update_in(
-        pads,
-        [pad, :queue],
-        &{byte_size(&1 <> payload), &1 <> payload}
-      )
-
-    Membrane.Logger.debug(pad)
-    # IO.inspect(pad)
-    # IO.inspect("process")
-    # IO.inspect("payload: #{byte_size(payload)}")
-    state = %{state | pads: pads}
-
-    if size >= sample_size do
-      case(try_interleave(state)) do
-        {:ok, {buffer, state}} -> {{:ok, buffer: buffer}, state}
-        {:empty, _} -> {:ok, state}
-      end
+    if state.finished do
+      {:ok, state}
     else
-      Membrane.Logger.debug("redemand")
-      {{:ok, redemand: :output}, state}
+      {queue_size, pads} =
+        Bunch.Access.get_and_update_in(
+          pads,
+          [pad, :queue],
+          &{byte_size(&1 <> payload), &1 <> payload}
+        )
+
+      state = %{state | pads: pads}
+
+      if queue_size >= Caps.sample_size(caps) do
+        interleave_and_return(state)
+      else
+        {{:ok, redemand: :output}, state}
+      end
     end
   end
 
@@ -209,50 +195,57 @@ defmodule Membrane.AudioInterleaver do
     end
   end
 
+  # send demand to input pads where current queue is not long enough
   defp do_handle_demand(size, %{pads: pads} = state) do
-    demands =
-      Enum.map(
-        pads,
-        fn {pad, %{queue: queue}} ->
-          demand_size =
-            queue
-            |> byte_size()
-            |> then(&max(0, size - &1))
+    if state.finished do
+      {:ok, state}
+    else
+      demands =
+        Enum.map(
+          pads,
+          fn {pad, %{queue: queue}} ->
+            demand_size =
+              queue
+              |> byte_size()
+              |> then(&max(0, size - &1))
 
-          {:demand, {pad, demand_size}}
-        end
-      )
+            {:demand, {pad, demand_size}}
+          end
+        )
 
-    {{:ok, demands}, state}
+      {{:ok, demands}, state}
+    end
   end
 
-  defp try_interleave(%{caps: caps, pads: pads, channels: channels} = state) do
-    active_pads = length(Map.keys(pads))
+  # try to interleave channels and formulate proper element callback return message
+  defp interleave_and_return(state) do
+    case(try_interleave(state)) do
+      :none -> {:ok, state}
+      {:finished, {buffer, state}} -> {{:ok, buffer: buffer, end_of_stream: :output}, state}
+      {:ok, {buffer, state}} -> {{:ok, buffer: buffer}, state}
+    end
+  end
 
-    if active_pads < channels do
-      Membrane.Logger.debug("no interleaving, channels: #{active_pads}")
-      {:empty, {{:output, %Buffer{payload: <<>>}}, state}}
-    else
-      Membrane.Logger.debug("interleaving, channels: #{channels}")
+  # interleave channels only if all queues are long enough (have at least 'sample_size' size)
+  defp try_interleave(%{caps: caps, pads: pads, order: order} = state) do
+    sample_size = Caps.sample_size(caps)
 
-      sample_size = Caps.sample_size(caps)
+    min_length =
+      min_queue_length(pads)
+      |> trunc_to_whole_samples(sample_size)
 
-      min_length =
-        min_queue_length(pads)
-        |> trunc_to_whole_samples(sample_size)
+    if min_length >= sample_size do
+      {payload, pads} = DoInterleave.interleave(min_length, caps, pads, order)
+      state = %{state | pads: pads}
+      buffer = {:output, %Buffer{payload: payload}}
 
-      Membrane.Logger.debug("min length: #{min_length}")
-
-      if min_length >= sample_size do
-        {payload, pads} = DoInterleave.interleave(min_length, caps, pads, state.order)
-        pads = remove_finished_pads(pads, sample_size)
-
-        buffer = {:output, %Buffer{payload: payload}}
-        {:ok, {buffer, %{state | pads: pads}}}
+      if any_finished?(pads, sample_size) do
+        {:finished, {buffer, %{state | finished: true}}}
       else
-        empty_buffer = {:output, %Buffer{payload: <<>>}}
-        {:empty, {empty_buffer, state}}
+        {:ok, {buffer, state}}
       end
+    else
+      :none
     end
   end
 
@@ -270,12 +263,12 @@ defmodule Membrane.AudioInterleaver do
     size - rest
   end
 
-  defp remove_finished_pads(pads, sample_size) do
+  # check if any pad is finished
+  defp any_finished?(pads, sample_size) do
     pads
-    |> Enum.flat_map(fn
-      {_pad, %{queue: queue, stream_ended: true}} when byte_size(queue) < sample_size -> []
-      pad_data -> [pad_data]
+    |> Enum.any?(fn
+      {_pad, %{queue: queue, stream_ended: true}} when byte_size(queue) < sample_size -> true
+      _ -> false
     end)
-    |> Map.new()
   end
 end
