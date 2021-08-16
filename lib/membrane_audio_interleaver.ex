@@ -226,7 +226,7 @@ defmodule Membrane.AudioInterleaver do
       |> trunc_to_whole_samples(sample_size)
 
     if min_length >= sample_size do
-      {payload, pads} = DoInterleave.interleave(min_length, caps, pads, order)
+      {payload, pads} = DoInterleave.interleave(min_length, sample_size, pads, order)
       state = %{state | pads: pads}
       buffer = {:output, %Buffer{payload: payload}}
 
