@@ -32,7 +32,6 @@ defmodule Membrane.AudioInterleaver do
                 default: 2048
               ],
               order: [
-                # TODO list?
                 type: :list,
                 spec: list(integer),
                 description: """
@@ -84,10 +83,11 @@ defmodule Membrane.AudioInterleaver do
 
   # TODO here count channels, add default order (sorted ids)
   @impl true
-  def handle_prepared_to_playing(_context, %{caps: %Caps{} = caps} = state) do
-    {{:ok, caps: {:output, caps}}, state}
+  def handle_prepared_to_playing(_context, %{caps: %Caps{} = caps, channels: channels} = state) do
+    {{:ok, caps: {:output, %Caps{caps | channels: channels}}}, state}
   end
 
+  # TODO nil caps
   def handle_prepared_to_playing(_context, %{caps: nil} = state) do
     {:ok, state}
   end
@@ -118,10 +118,7 @@ defmodule Membrane.AudioInterleaver do
 
   @impl true
   def handle_end_of_stream(pad, _context, %{caps: caps} = state) do
-    IO.inspect("eos for pad #{elem(pad, 2)}")
-
     if state.finished do
-      Membrane.Logger.debug("already finished")
       # end of stream already sent
       {:ok, state}
     else
@@ -141,10 +138,8 @@ defmodule Membrane.AudioInterleaver do
         end
 
       if state.finished do
-        Membrane.Logger.debug("eos sent")
         {{:ok, end_of_stream: :output}, state}
       else
-        Membrane.Logger.debug("interleaving and sending")
         interleave_and_return(state)
       end
     end
@@ -197,8 +192,6 @@ defmodule Membrane.AudioInterleaver do
 
   # send demand to input pads where current queue is not long enough
   defp do_handle_demand(size, %{pads: pads} = state) do
-    Membrane.Logger.debug("demand for #{size}")
-
     if state.finished do
       {:ok, state}
     else
@@ -222,15 +215,9 @@ defmodule Membrane.AudioInterleaver do
   # try to interleave channels and formulate proper element callback return message
   defp interleave_and_return(state) do
     case(try_interleave(state)) do
-      :none ->
-        {:ok, state}
-
-      {:finished, {buffer, state}} ->
-        Membrane.Logger.debug("eos sent")
-        {{:ok, buffer: buffer, end_of_stream: :output}, state}
-
-      {:ok, {buffer, state}} ->
-        {{:ok, buffer: buffer}, state}
+      :none -> {:ok, state}
+      {:finished, {buffer, state}} -> {{:ok, buffer: buffer, end_of_stream: :output}, state}
+      {:ok, {buffer, state}} -> {{:ok, buffer: buffer}, state}
     end
   end
 
@@ -271,7 +258,6 @@ defmodule Membrane.AudioInterleaver do
     size - rest
   end
 
-  # check if any pad is finished
   defp any_finished?(pads, sample_size) do
     pads
     |> Enum.any?(fn
