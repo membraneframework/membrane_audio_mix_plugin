@@ -91,6 +91,11 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
+  def handle_prepared_to_playing(_context, %{caps: nil} = state) do
+    {:ok, state}
+  end
+
+  @impl true
   def handle_demand(:output, size, :bytes, _context, %{channels: channels} = state) do
     do_handle_demand(div(size, channels), state)
   end
