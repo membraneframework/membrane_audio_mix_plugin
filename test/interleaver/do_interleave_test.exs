@@ -20,8 +20,8 @@ defmodule Membrane.DdInterleaveTest do
     {{Membrane.Pad, :input, key}, %{end_of_stream: false, queue: queue}}
   end
 
-  describe "DoInterleaver interleave test" do
-    test "test interleave for different sample_size" do
+  describe "DoInterleaver interleave should" do
+    test "correctly interleave and update queues" do
       pads =
         Map.new([
           to_pad(1, <<1, 2, 3, 4, 5, 6, 7, 8>>),
@@ -49,7 +49,7 @@ defmodule Membrane.DdInterleaveTest do
       assert expected4 == DoInterleave.interleave(bytes_per_channel, 4, pads, order)
     end
 
-    test "test interleave order" do
+    test "interleave in correct order" do
       pads =
         Map.new([
           to_pad(1, <<1, 2, 3, 4, 5, 6, 7, 8>>),
@@ -72,14 +72,6 @@ defmodule Membrane.DdInterleaveTest do
     end
   end
 
-  test "splits binaries in reversed chunks" do
-    assert DoInterleave.to_chunks_reversed(<<1, 2, 3, 4>>, 2) == [<<3, 4>>, <<1, 2>>]
-    assert DoInterleave.to_chunks_reversed(<<1, 2, 3, 4>>, 3) == [<<4>>, <<1, 2, 3>>]
-    assert DoInterleave.to_chunks_reversed(<<1, 2, 3>>, 1) == [<<3>>, <<2>>, <<1>>]
-    assert DoInterleave.to_chunks_reversed(<<1>>, 1) == [<<1>>]
-    assert DoInterleave.to_chunks_reversed(<<>>, 1) == [<<>>]
-  end
-
   test "interleave binaries" do
     payload1 = <<227, 2, 3, 4, 5, 6>>
     payload2 = <<7, 8, 9, 10, 11, 12>>
@@ -99,5 +91,13 @@ defmodule Membrane.DdInterleaveTest do
              3
            ) ==
              <<227, 2, 3, 7, 8, 9, 10, 20, 30, 4, 5, 6, 10, 11, 12, 40, 50, 60>>
+  end
+
+  test "split binaries in reversed chunks" do
+    assert DoInterleave.to_chunks_reversed(<<1, 2, 3, 4>>, 2) == [<<3, 4>>, <<1, 2>>]
+    assert DoInterleave.to_chunks_reversed(<<1, 2, 3, 4>>, 3) == [<<4>>, <<1, 2, 3>>]
+    assert DoInterleave.to_chunks_reversed(<<1, 2, 3>>, 1) == [<<3>>, <<2>>, <<1>>]
+    assert DoInterleave.to_chunks_reversed(<<1>>, 1) == [<<1>>]
+    assert DoInterleave.to_chunks_reversed(<<>>, 1) == [<<>>]
   end
 end
