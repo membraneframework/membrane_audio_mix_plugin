@@ -265,7 +265,7 @@ defmodule Membrane.AudioInterleaver do
     pads
     |> Enum.any?(fn
       {_pad, %{queue: queue, stream_ended: true}} when byte_size(queue) < sample_size -> true
-      _ -> false
+      _entry -> false
     end)
   end
 
