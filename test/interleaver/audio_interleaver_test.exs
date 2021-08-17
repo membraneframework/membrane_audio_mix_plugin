@@ -14,14 +14,16 @@ defmodule Membrane.AudioInterleaverTest do
   import Membrane.Testing.Assertions
 
   alias Membrane.AudioInterleaver
-  alias Membrane.AudioMixer.DoInterleave
+  alias Membrane.Audiointerleaver.DoInterleave
   alias Membrane.Testing.Pipeline
   alias Membrane.Caps.Audio.Raw, as: Caps
 
   require Membrane.Logger
 
-  @input_path_1 Path.expand("../fixtures/interleaver/in1.raw", __DIR__)
-  @input_path_2 Path.expand("../fixtures/interleaver/in2.raw", __DIR__)
+  @in1 Path.expand("../fixtures/interleaver/in1.raw", __DIR__)
+  @in2 Path.expand("../fixtures/interleaver/in2.raw", __DIR__)
+  @in3 Path.expand("../fixtures/interleaver/in3.raw", __DIR__)
+  @in11 Path.expand("../fixtures/interleaver/in11.raw", __DIR__)
 
   defp expand_path(file_name) do
     Path.expand("../fixtures/interleaver/#{file_name}", __DIR__)
@@ -37,20 +39,20 @@ defmodule Membrane.AudioInterleaverTest do
   end
 
   describe "Audio Interleaver should interleave" do
-    defp create_elements(input_paths, output_path, audio_format \\ :s16le) do
+    defp create_elements(input_paths, output_path, order, audio_format \\ :s16le) do
       input_paths
       |> Enum.with_index(1)
       |> Enum.map(fn {path, index} ->
         {String.to_atom("file_src_#{index}"), %Membrane.File.Source{location: path}}
       end)
       |> Enum.concat(
-        mixer: %Membrane.AudioInterleaver{
+        interleaver: %Membrane.AudioInterleaver{
           caps: %Caps{
             channels: 1,
             sample_rate: 16_000,
             format: audio_format
           },
-          order: [1, 2]
+          order: order
         },
         file_sink: %Membrane.File.Sink{location: output_path}
       )
@@ -61,7 +63,7 @@ defmodule Membrane.AudioInterleaverTest do
       assert {:ok, pid} = Pipeline.start_link(pipeline_options)
 
       assert Pipeline.play(pid) == :ok
-      assert_end_of_stream(pid, :file_sink, :input, 6_000)
+      assert_end_of_stream(pid, :file_sink, :input, 5_000)
       Pipeline.stop_and_terminate(pid, blocking?: true)
 
       assert {:ok, reference_file} = File.read(reference_path)
@@ -72,16 +74,75 @@ defmodule Membrane.AudioInterleaverTest do
     test "two tracks with the same size" do
       output_path = prepare_output()
       reference_path = expand_path("out12_size2.raw")
-
-      elements = create_elements([@input_path_1, @input_path_2], output_path)
+      elements = create_elements([@in1, @in2], output_path, [1, 2])
 
       links = [
         link(:file_src_1)
         |> via_in(Pad.ref(:input, 1))
-        |> to(:mixer),
+        |> to(:interleaver),
         link(:file_src_2)
         |> via_in(Pad.ref(:input, 2))
-        |> to(:mixer)
+        |> to(:interleaver)
+        |> to(:file_sink)
+      ]
+
+      perform_test(elements, links, reference_path, output_path)
+    end
+
+    test "two tracks with custom order" do
+      output_path = prepare_output()
+      reference_path = expand_path("out12_size2.raw")
+      elements = create_elements([@in2, @in1], output_path, [2, 1])
+
+      links = [
+        link(:file_src_1)
+        |> via_in(Pad.ref(:input, 1))
+        |> to(:interleaver),
+        link(:file_src_2)
+        |> via_in(Pad.ref(:input, 2))
+        |> to(:interleaver)
+        |> to(:file_sink)
+      ]
+
+      perform_test(elements, links, reference_path, output_path)
+    end
+
+    test "two tracks with different size (cutting longer input) " do
+      output_path = prepare_output()
+
+      links = [
+        link(:file_src_1)
+        |> via_in(Pad.ref(:input, 1))
+        |> to(:interleaver),
+        link(:file_src_2)
+        |> via_in(Pad.ref(:input, 2))
+        |> to(:interleaver)
+        |> to(:file_sink)
+      ]
+
+      elements = create_elements([@in11, @in2], output_path, [1, 2])
+      perform_test(elements, links, expand_path("out12_size2.raw"), output_path)
+
+      elements = create_elements([@in11, @in2], output_path, [1, 2], :s8)
+      perform_test(elements, links, expand_path("out12_size1.raw"), output_path)
+    end
+
+    test "3 tracks, varying size" do
+      output_path = prepare_output()
+      reference_path = expand_path("out123_size2.raw")
+
+      elements = create_elements([@in11, @in2, @in3], output_path, [1, 2, 3])
+
+      links = [
+        link(:file_src_1)
+        |> via_in(Pad.ref(:input, 1))
+        |> to(:interleaver),
+        link(:file_src_2)
+        |> via_in(Pad.ref(:input, 2))
+        |> to(:interleaver),
+        link(:file_src_3)
+        |> via_in(Pad.ref(:input, 3))
+        |> to(:interleaver)
         |> to(:file_sink)
       ]
 
