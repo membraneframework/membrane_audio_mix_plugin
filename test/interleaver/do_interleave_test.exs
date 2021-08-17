@@ -85,16 +85,16 @@ defmodule Membrane.DdInterleaveTest do
     payload2 = <<7, 8, 9, 10, 11, 12>>
     payload3 = <<10, 20, 30, 40, 50, 60>>
 
-    assert do_interleave([payload1, payload2], 2) ==
+    assert interleave_binaries([payload1, payload2], 2) ==
              <<227, 2, 7, 8, 3, 4, 9, 10, 5, 6, 11, 12>>
 
-    assert do_interleave(
+    assert interleave_binaries(
              [payload1, payload2, payload3],
              2
            ) ==
              <<227, 2, 7, 8, 10, 20, 3, 4, 9, 10, 30, 40, 5, 6, 11, 12, 50, 60>>
 
-    assert do_interleave(
+    assert interleave_binaries(
              [payload1, payload2, payload3],
              3
            ) ==

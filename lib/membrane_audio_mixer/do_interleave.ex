@@ -1,4 +1,14 @@
 defmodule Membrane.AudioMixer.DoInterleave do
+  @moduledoc """
+  Module responsible for interleaving audio tracks (all in the same format, with 1
+  channel) in a given order.
+  """
+
+  @doc """
+  Order queues according to 'order', take 'bytes_per_channel' from each queue
+  (all queues must be at least 'bytes_per_channel' long),
+  and interleave them.
+  """
   @spec interleave(pos_integer(), pos_integer(), %{}, [integer()]) :: {any, map}
   def interleave(bytes_per_channel, _sample_size, pads, _order) when map_size(pads) == 1 do
     [{pad, data}] = Map.to_list(pads)
@@ -9,39 +19,22 @@ defmodule Membrane.AudioMixer.DoInterleave do
     {payload, pads}
   end
 
-  # take 'bytes_per_channel' from each queue and interleave them in given order
   def interleave(bytes_per_channel, sample_size, pads, order) do
     pads_inorder = order_pads(pads, order)
     {payloads, pads_list} = get_payloads(bytes_per_channel, pads_inorder)
 
-    payload = do_interleave(payloads, sample_size)
+    payload = interleave_binaries(payloads, sample_size)
 
     {payload, Map.new(pads_list)}
   end
 
-  defp order_pads(pads, order) do
-    order
-    |> Enum.map(fn nr -> {Membrane.Pad, :input, nr} end)
-    |> Enum.map(fn pad -> {pad, pads[pad]} end)
-    |> Enum.to_list()
-  end
+  @doc """
+  Interleave binaries, taking 'sample_size' bytes at a time.
+  """
+  @spec interleave_binaries([binary()], pos_integer()) :: any
+  def interleave_binaries(payloads, sample_size)
 
-  # get channels' payloads of given size from their queues
-  # (all queues must be at least 'payload_size' long)
-  defp get_payloads(payload_size, pads_inorder) do
-    pads_inorder
-    |> Enum.map(fn
-      {pad, %{queue: <<payload::binary-size(payload_size)>> <> rest} = data} ->
-        {payload, {pad, %{data | queue: rest}}}
-    end)
-    |> Enum.unzip()
-  end
-
-  # interleave channels' payloads
-  @spec do_interleave([binary()], pos_integer()) :: any
-  def do_interleave(payloads, sample_size)
-
-  def do_interleave(payloads, sample_size) do
+  def interleave_binaries(payloads, sample_size) do
     payloads
     # split each channel's payload into 'sample_size' chunks (channels order is reversed)
     |> Enum.map(fn payload -> to_chunks_reversed(payload, sample_size) end)
@@ -52,11 +45,9 @@ defmodule Membrane.AudioMixer.DoInterleave do
     |> join_binaries()
   end
 
-  # joins list of binaries into one binary
-  defp join_binaries(binaries) do
-    Enum.reduce(binaries, <<>>, &(&2 <> &1))
-  end
-
+  @doc """
+  Split bitstring into chunks of 'chunk_size'. Chunks are returned in reversed order.
+  """
   @spec to_chunks_reversed(bitstring, pos_integer(), list()) :: list
   def to_chunks_reversed(mbinary, chunk_size, acc \\ [])
 
@@ -67,5 +58,26 @@ defmodule Membrane.AudioMixer.DoInterleave do
   def to_chunks_reversed(mbinary, chunk_size, acc) do
     <<chunk::binary-size(chunk_size), rest::bitstring>> = mbinary
     to_chunks_reversed(rest, chunk_size, [<<chunk::binary-size(chunk_size)>> | acc])
+  end
+
+  defp order_pads(pads, order) do
+    order
+    |> Enum.map(fn nr -> {Membrane.Pad, :input, nr} end)
+    |> Enum.map(fn pad -> {pad, pads[pad]} end)
+    |> Enum.to_list()
+  end
+
+  defp get_payloads(payload_size, pads_inorder) do
+    pads_inorder
+    |> Enum.map(fn
+      {pad, %{queue: <<payload::binary-size(payload_size)>> <> rest} = data} ->
+        {payload, {pad, %{data | queue: rest}}}
+    end)
+    |> Enum.unzip()
+  end
+
+  # joins list of binaries into one binary
+  defp join_binaries(binaries) do
+    Enum.reduce(binaries, <<>>, &(&2 <> &1))
   end
 end

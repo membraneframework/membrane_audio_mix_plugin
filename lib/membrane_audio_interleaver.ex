@@ -2,6 +2,10 @@ defmodule Membrane.AudioInterleaver do
   @moduledoc """
   Element responsible for interleaving several mono audio streams into single interleaved stream.
   All input streams should be in the same raw audio format, defined by 'caps' option.
+
+  Channels are interleaved in order given in 'order' option - currently required, no default available.
+
+  Each input pad should be identified with your custom id (using 'via_in(Pad.ref(:input, your_example_id)' )
   """
 
   use Membrane.Filter
@@ -81,15 +85,9 @@ defmodule Membrane.AudioInterleaver do
     {:ok, state}
   end
 
-  # TODO here count channels, add default order (sorted ids)
   @impl true
   def handle_prepared_to_playing(_context, %{caps: %Caps{} = caps, channels: channels} = state) do
     {{:ok, caps: {:output, %Caps{caps | channels: channels}}}, state}
-  end
-
-  # TODO nil caps
-  def handle_prepared_to_playing(_context, %{caps: nil} = state) do
-    {:ok, state}
   end
 
   @impl true
@@ -177,7 +175,7 @@ defmodule Membrane.AudioInterleaver do
     case state.caps do
       nil ->
         state = %{state | caps: caps}
-        {{:ok, caps: {:output, caps}, redemand: :output}, state}
+        {{:ok, caps: {:output, %{caps | channels: 2}}, redemand: :output}, state}
 
       ^caps ->
         {:ok, state}
