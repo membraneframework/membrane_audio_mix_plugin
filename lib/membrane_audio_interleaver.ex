@@ -118,26 +118,35 @@ defmodule Membrane.AudioInterleaver do
 
   @impl true
   def handle_end_of_stream(pad, _context, %{caps: caps} = state) do
-    IO.inspect(pad)
-    sample_size = Caps.sample_size(caps)
-
-    state =
-      case Bunch.Access.get_in(state, [:pads, pad]) do
-        %{queue: queue} when byte_size(queue) < sample_size ->
-          %{state | finished: true}
-
-        _state ->
-          Bunch.Access.update_in(
-            state,
-            [:pads, pad],
-            &%{&1 | stream_ended: true}
-          )
-      end
+    IO.inspect("eos for pad #{elem(pad, 2)}")
 
     if state.finished do
-      {{:ok, end_of_stream: :output}, state}
+      Membrane.Logger.debug("already finished")
+      # end of stream already sent
+      {:ok, state}
     else
-      interleave_and_return(state)
+      sample_size = Caps.sample_size(caps)
+
+      state =
+        case Bunch.Access.get_in(state, [:pads, pad]) do
+          %{queue: queue} when byte_size(queue) < sample_size ->
+            %{state | finished: true}
+
+          _state ->
+            Bunch.Access.update_in(
+              state,
+              [:pads, pad],
+              &%{&1 | stream_ended: true}
+            )
+        end
+
+      if state.finished do
+        Membrane.Logger.debug("eos sent")
+        {{:ok, end_of_stream: :output}, state}
+      else
+        Membrane.Logger.debug("interleaving and sending")
+        interleave_and_return(state)
+      end
     end
   end
 
@@ -188,6 +197,8 @@ defmodule Membrane.AudioInterleaver do
 
   # send demand to input pads where current queue is not long enough
   defp do_handle_demand(size, %{pads: pads} = state) do
+    Membrane.Logger.debug("demand for #{size}")
+
     if state.finished do
       {:ok, state}
     else
@@ -211,9 +222,15 @@ defmodule Membrane.AudioInterleaver do
   # try to interleave channels and formulate proper element callback return message
   defp interleave_and_return(state) do
     case(try_interleave(state)) do
-      :none -> {:ok, state}
-      {:finished, {buffer, state}} -> {{:ok, buffer: buffer, end_of_stream: :output}, state}
-      {:ok, {buffer, state}} -> {{:ok, buffer: buffer}, state}
+      :none ->
+        {:ok, state}
+
+      {:finished, {buffer, state}} ->
+        Membrane.Logger.debug("eos sent")
+        {{:ok, buffer: buffer, end_of_stream: :output}, state}
+
+      {:ok, {buffer, state}} ->
+        {{:ok, buffer: buffer}, state}
     end
   end
 
