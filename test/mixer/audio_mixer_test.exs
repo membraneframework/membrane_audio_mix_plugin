@@ -7,13 +7,13 @@ defmodule Membrane.AudioMixerTest do
   alias Membrane.Caps.Audio.Raw, as: Caps
   alias Membrane.Testing.Pipeline
 
-  @input_path_1 Path.expand("../fixtures/input-1.raw", __DIR__)
-  @input_path_2 Path.expand("../fixtures/input-2.raw", __DIR__)
+  @input_path_1 Path.expand("../fixtures/mixer/input-1.raw", __DIR__)
+  @input_path_2 Path.expand("../fixtures/mixer/input-2.raw", __DIR__)
 
-  @input_path_mp3 Path.expand("../fixtures/input.mp3", __DIR__)
+  @input_path_mp3 Path.expand("../fixtures/mixer/input.mp3", __DIR__)
 
   defp expand_path(file_name) do
-    Path.expand("../fixtures/#{file_name}", __DIR__)
+    Path.expand("../fixtures/mixer/#{file_name}", __DIR__)
   end
 
   defp prepare_output() do
