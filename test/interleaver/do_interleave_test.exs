@@ -16,11 +16,11 @@ defmodule Membrane.DdInterleaveTest do
 
   require Membrane.Logger
 
-  def to_pad(key, queue, end_of_stream \\ false) do
-    {{Membrane.Pad, :input, key}, %{end_of_stream: false, queue: queue}}
-  end
-
   describe "DoInterleaver interleave should" do
+    defp to_pad(key, queue, end_of_stream \\ false) do
+      {{Membrane.Pad, :input, key}, %{end_of_stream: false, queue: queue}}
+    end
+
     test "correctly interleave and update queues" do
       pads =
         Map.new([
