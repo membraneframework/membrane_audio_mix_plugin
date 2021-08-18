@@ -5,8 +5,8 @@ defmodule Membrane.AudioMixer.DoInterleave do
   """
 
   @doc """
-  Order queues according to 'order', take 'bytes_per_channel' from each queue
-  (all queues must be at least 'bytes_per_channel' long),
+  Order queues according to `order`, take `bytes_per_channel` from each queue
+  (all queues must be at least `bytes_per_channel` long),
   and interleave them.
   """
   @spec interleave(pos_integer(), pos_integer(), %{}, [integer()]) :: {any, map}
@@ -29,14 +29,14 @@ defmodule Membrane.AudioMixer.DoInterleave do
   end
 
   @doc """
-  Interleave binaries, taking 'sample_size' bytes at a time.
+  Interleave binaries, taking `sample_size` bytes at a time.
   """
   @spec interleave_binaries([binary()], pos_integer()) :: any
   def interleave_binaries(payloads, sample_size)
 
   def interleave_binaries(payloads, sample_size) do
     payloads
-    # split each channel's payload into 'sample_size' chunks (channels order is reversed)
+    # split each channel's payload into `sample_size` chunks (channels order is reversed)
     |> Enum.map(fn payload -> to_chunks_reversed(payload, sample_size) end)
     # zip corresponding chunks of different channels and concatenate them (channels order is again reversed)
     |> Enum.zip_reduce([], fn zipped_chunks, acc ->
@@ -46,7 +46,7 @@ defmodule Membrane.AudioMixer.DoInterleave do
   end
 
   @doc """
-  Split bitstring into chunks of 'chunk_size'. Chunks are returned in reversed order.
+  Split bitstring into chunks of `chunk_size`. Chunks are returned in reversed order.
   """
   @spec to_chunks_reversed(bitstring, pos_integer(), list()) :: list
   def to_chunks_reversed(mbinary, chunk_size, acc \\ [])
