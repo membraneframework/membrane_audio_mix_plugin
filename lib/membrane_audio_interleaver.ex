@@ -1,7 +1,7 @@
 defmodule Membrane.AudioInterleaver do
   @moduledoc """
   Element responsible for interleaving several mono audio streams into single interleaved stream.
-  All input streams should be in the same raw audio format, defined by `caps` option.
+  All input streams should be in the same raw audio format, defined by `input_caps` option.
 
   Channels are interleaved in order given in `order` option - currently required, no default available.
 
@@ -17,7 +17,7 @@ defmodule Membrane.AudioInterleaver do
 
   require Membrane.Logger
 
-  def_options caps: [
+  def_options input_caps: [
                 type: :struct,
                 spec: Caps.t(),
                 description: """
@@ -87,12 +87,15 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
-  def handle_prepared_to_playing(_context, %{caps: %Caps{} = caps, channels: channels} = state) do
-    {{:ok, caps: {:output, %Caps{caps | channels: channels}}}, state}
+  def handle_prepared_to_playing(
+        _context,
+        %{input_caps: %Caps{} = input_caps, channels: channels} = state
+      ) do
+    {{:ok, caps: {:output, %Caps{input_caps | channels: channels}}}, state}
   end
 
   @impl true
-  def handle_prepared_to_playing(_context, %{caps: nil} = state) do
+  def handle_prepared_to_playing(_context, %{input_caps: nil} = state) do
     {:ok, state}
   end
 
@@ -107,26 +110,26 @@ defmodule Membrane.AudioInterleaver do
         buffers_count,
         :buffers,
         _context,
-        %{frames_per_buffer: frames, caps: caps} = state
+        %{frames_per_buffer: frames, input_caps: input_caps} = state
       ) do
-    case caps do
+    case input_caps do
       nil ->
         {:ok, state}
 
       _caps ->
-        size = buffers_count * Caps.frames_to_bytes(frames, caps)
+        size = buffers_count * Caps.frames_to_bytes(frames, input_caps)
 
         do_handle_demand(size, state)
     end
   end
 
   @impl true
-  def handle_end_of_stream(pad, _context, %{caps: caps} = state) do
+  def handle_end_of_stream(pad, _context, %{input_caps: input_caps} = state) do
     if state.finished do
       # end of stream already sent
       {:ok, state}
     else
-      sample_size = Caps.sample_size(caps)
+      sample_size = Caps.sample_size(input_caps)
 
       state =
         case Bunch.Access.get_in(state, [:pads, pad]) do
@@ -161,14 +164,14 @@ defmodule Membrane.AudioInterleaver do
         pad,
         %Buffer{payload: payload} = _buffer,
         _context,
-        %{caps: caps} = state
+        %{input_caps: input_caps} = state
       ) do
     if state.finished do
       {:ok, state}
     else
       {new_queue_size, state} = add_payload(payload, pad, state)
 
-      if new_queue_size >= Caps.sample_size(caps) do
+      if new_queue_size >= Caps.sample_size(input_caps) do
         interleave_and_return(state)
       else
         {{:ok, redemand: :output}, state}
@@ -177,19 +180,21 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
-  def handle_caps(pad, caps, _context, state) do
-    case state.caps do
+  def handle_caps(pad, input_caps, _context, state) do
+    case state.input_caps do
       nil ->
-        state = %{state | caps: caps}
-        {{:ok, caps: {:output, %{caps | channels: state.channels}}, redemand: :output}, state}
+        state = %{state | input_caps: input_caps}
 
-      ^caps ->
+        {{:ok, caps: {:output, %{input_caps | channels: state.channels}}, redemand: :output},
+         state}
+
+      ^input_caps ->
         {:ok, state}
 
       _invalid_caps ->
         raise(
           RuntimeError,
-          "received invalid caps on pad #{inspect(pad)}, expected: #{inspect(state.caps)}, got: #{inspect(caps)}"
+          "received invalid caps on pad #{inspect(pad)}, expected: #{inspect(state.input_caps)}, got: #{inspect(input_caps)}"
         )
     end
   end
@@ -226,8 +231,8 @@ defmodule Membrane.AudioInterleaver do
   end
 
   # interleave channels only if all queues are long enough (have at least `sample_size` size)
-  defp try_interleave(%{caps: caps, pads: pads, order: order} = state) do
-    sample_size = Caps.sample_size(caps)
+  defp try_interleave(%{input_caps: input_caps, pads: pads, order: order} = state) do
+    sample_size = Caps.sample_size(input_caps)
 
     min_length =
       pads

@@ -97,14 +97,14 @@ defmodule Interleave.Pipeline do
       parser_1: Membrane.WAV.Parser,
       parser_2: Membrane.WAV.Parser,
       interleaver: %Membrane.AudioInterleaver{
-        caps: %Membrane.Caps.Audio.Raw{
+        input_caps: %Membrane.Caps.Audio.Raw{
           channels: 1,
           sample_rate: 16_000,
           format: :s16le
         },
         order: [:left, :right]
       },
-      file_sink: %Sink{location: "output.wav"}
+      file_sink: %Sink{location: "output.raw"}
     }
 
     links = [
