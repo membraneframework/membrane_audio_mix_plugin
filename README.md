@@ -43,7 +43,7 @@ If audio streams have different size, longer stream is clipped.
 
 Input pads have to be named by the user, and interleaving order must be provided (see example usage).
 
-## Example Usage
+## Usage Example
 ### AudioMixer
 ```elixir
 defmodule Mixing.Pipeline do
