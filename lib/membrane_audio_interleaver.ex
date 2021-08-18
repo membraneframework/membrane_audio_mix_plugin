@@ -37,11 +37,10 @@ defmodule Membrane.AudioInterleaver do
               ],
               order: [
                 type: :list,
-                spec: list(integer),
+                spec: [any()],
                 description: """
                 Order in which channels should be interleaved
-                """,
-                default: nil
+                """
               ]
 
   def_output_pad :output,
@@ -60,9 +59,11 @@ defmodule Membrane.AudioInterleaver do
     state =
       options
       |> Map.from_struct()
-      |> Map.put(:pads, %{})
-      |> Map.put(:finished, false)
-      |> Map.put(:channels, length(options.order))
+      |> Map.merge(%{
+        pads: %{},
+        finished: false,
+        channels: length(options.order)
+      })
 
     {:ok, state}
   end
@@ -180,7 +181,7 @@ defmodule Membrane.AudioInterleaver do
     case state.caps do
       nil ->
         state = %{state | caps: caps}
-        {{:ok, caps: {:output, %{caps | channels: 2}}, redemand: :output}, state}
+        {{:ok, caps: {:output, %{caps | channels: state.channels}}, redemand: :output}, state}
 
       ^caps ->
         {:ok, state}
@@ -217,19 +218,20 @@ defmodule Membrane.AudioInterleaver do
 
   # try to interleave channels and formulate proper element callback return message
   defp interleave_and_return(state) do
-    case(try_interleave(state)) do
+    case try_interleave(state) do
       :none -> {:ok, state}
       {:finished, {buffer, state}} -> {{:ok, buffer: buffer, end_of_stream: :output}, state}
       {:ok, {buffer, state}} -> {{:ok, buffer: buffer}, state}
     end
   end
 
-  # interleave channels only if all queues are long enough (have at least 'sample_size' size)
+  # interleave channels only if all queues are long enough (have at least `sample_size` size)
   defp try_interleave(%{caps: caps, pads: pads, order: order} = state) do
     sample_size = Caps.sample_size(caps)
 
     min_length =
-      min_queue_length(pads)
+      pads
+      |> min_queue_length
       |> trunc_to_whole_samples(sample_size)
 
     if min_length >= sample_size do

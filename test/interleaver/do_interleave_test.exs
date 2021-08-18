@@ -1,11 +1,6 @@
 defmodule Membrane.DdInterleaveTest do
   @moduledoc """
-  Tests for DoMix module. It contatins only one public function - `mix(buffers, caps)`, so tests
-  check output of the mixing for serveral formats.
-
-  Debugging: before every test, Membrane.Logger prints message with used caps. They can be seen
-  only when particular test do not pass. In such case last debug message contains caps for
-  which the test did not pass.
+  Tests for DoInterleave module.
   """
 
   use ExUnit.Case, async: true

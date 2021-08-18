@@ -1,11 +1,6 @@
 defmodule Membrane.AudioInterleaverTest do
   @moduledoc """
-  Tests for DoMix module. It contatins only one public function - `mix(buffers, caps)`, so tests
-  check output of the mixing for serveral formats.
-
-  Debugging: before every test, Membrane.Logger prints message with used caps. They can be seen
-  only when particular test do not pass. In such case last debug message contains caps for
-  which the test did not pass.
+  Tests for AudioInterleaver module.
   """
 
   use ExUnit.Case
@@ -13,8 +8,6 @@ defmodule Membrane.AudioInterleaverTest do
 
   import Membrane.Testing.Assertions
 
-  alias Membrane.AudioInterleaver
-  alias Membrane.Audiointerleaver.DoInterleave
   alias Membrane.Testing.Pipeline
   alias Membrane.Caps.Audio.Raw, as: Caps
 
@@ -100,6 +93,24 @@ defmodule Membrane.AudioInterleaverTest do
         |> to(:interleaver),
         link(:file_src_2)
         |> via_in(Pad.ref(:input, 2))
+        |> to(:interleaver)
+        |> to(:file_sink)
+      ]
+
+      perform_test(elements, links, reference_path, output_path)
+    end
+
+    test "two tracks with atoms as names" do
+      output_path = prepare_output()
+      reference_path = expand_path("out12_size2.raw")
+      elements = create_elements([@in2, @in1], output_path, [:two, :one])
+
+      links = [
+        link(:file_src_1)
+        |> via_in(Pad.ref(:input, :one))
+        |> to(:interleaver),
+        link(:file_src_2)
+        |> via_in(Pad.ref(:input, :two))
         |> to(:interleaver)
         |> to(:file_sink)
       ]
