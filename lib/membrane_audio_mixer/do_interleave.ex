@@ -28,13 +28,10 @@ defmodule Membrane.AudioMixer.DoInterleave do
     {payload, Map.new(pads_list)}
   end
 
-  @doc """
-  Interleave binaries, taking `sample_size` bytes at a time.
-  """
-  @spec interleave_binaries([binary()], pos_integer()) :: any
-  def interleave_binaries(payloads, sample_size)
+  #  Interleave binaries, taking `sample_size` bytes at a time.
+  defp interleave_binaries(payloads, sample_size)
 
-  def interleave_binaries(payloads, sample_size) do
+  defp interleave_binaries(payloads, sample_size) do
     payloads
     # split each channel's payload into `sample_size` chunks (channels order is reversed)
     |> Enum.map(fn payload -> to_chunks_reversed(payload, sample_size) end)
@@ -45,26 +42,22 @@ defmodule Membrane.AudioMixer.DoInterleave do
     |> join_binaries()
   end
 
-  @doc """
-  Split bitstring into chunks of `chunk_size`. Chunks are returned in reversed order.
-  """
-  @spec to_chunks_reversed(bitstring, pos_integer(), list()) :: list
-  def to_chunks_reversed(mbinary, chunk_size, acc \\ [])
+  #  Split bitstring into chunks of `chunk_size`. Chunks are returned in reversed order.
+  defp to_chunks_reversed(binary, chunk_size, acc \\ [])
 
-  def to_chunks_reversed(mbinary, chunk_size, acc) when byte_size(mbinary) <= chunk_size do
-    [mbinary | acc]
+  defp to_chunks_reversed(binary, chunk_size, acc) when byte_size(binary) <= chunk_size do
+    [binary | acc]
   end
 
-  def to_chunks_reversed(mbinary, chunk_size, acc) do
-    <<chunk::binary-size(chunk_size), rest::bitstring>> = mbinary
+  defp to_chunks_reversed(binary, chunk_size, acc) do
+    <<chunk::binary-size(chunk_size), rest::bitstring>> = binary
     to_chunks_reversed(rest, chunk_size, [<<chunk::binary-size(chunk_size)>> | acc])
   end
 
   defp order_pads(pads, order) do
     order
-    |> Enum.map(fn nr -> {Membrane.Pad, :input, nr} end)
+    |> Enum.map(fn name -> {Membrane.Pad, :input, name} end)
     |> Enum.map(fn pad -> {pad, pads[pad]} end)
-    |> Enum.to_list()
   end
 
   defp get_payloads(payload_size, pads_inorder) do
