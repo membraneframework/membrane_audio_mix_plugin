@@ -97,10 +97,8 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
-  def handle_demand(:output, size, :bytes, _context, %{channels: channels, caps: caps} = state) do
-    sample_size = Caps.sample_size(caps)
-    # if size is not divisible by channels, round requested samples up
-    do_handle_demand(ceil(size / (channels * sample_size)) * sample_size, state)
+  def handle_demand(:output, size, :bytes, _context, %{channels: channels} = state) do
+    do_handle_demand(div(size, channels), state)
   end
 
   @impl true
