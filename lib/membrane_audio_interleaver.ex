@@ -97,8 +97,10 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
-  def handle_demand(:output, size, :bytes, _context, %{channels: channels} = state) do
-    do_handle_demand(div(size, channels), state)
+  def handle_demand(:output, size, :bytes, _context, %{channels: channels, caps: caps} = state) do
+    sample_size = Caps.sample_size(caps)
+    # if size is not divisible by channels, round requested samples up
+    do_handle_demand(Float.ceil(size / (channels * sample_size)) * sample_size, state)
   end
 
   @impl true
@@ -264,8 +266,7 @@ defmodule Membrane.AudioInterleaver do
   end
 
   defp any_finished?(pads, sample_size) do
-    pads
-    |> Enum.any?(fn
+    Enum.any?(pads, fn
       {_pad, %{queue: queue, stream_ended: true}} when byte_size(queue) < sample_size -> true
       _entry -> false
     end)
