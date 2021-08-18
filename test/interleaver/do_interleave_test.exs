@@ -5,8 +5,6 @@ defmodule Membrane.DdInterleaveTest do
 
   use ExUnit.Case, async: true
 
-  import Membrane.AudioMixer.DoInterleave
-
   alias Membrane.AudioMixer.DoInterleave
 
   require Membrane.Logger
@@ -65,34 +63,5 @@ defmodule Membrane.DdInterleaveTest do
       assert expected1 == DoInterleave.interleave(bytes_per_channel, 1, pads, order)
       assert expected2 == DoInterleave.interleave(bytes_per_channel, 2, pads, order)
     end
-  end
-
-  test "interleave binaries" do
-    payload1 = <<227, 2, 3, 4, 5, 6>>
-    payload2 = <<7, 8, 9, 10, 11, 12>>
-    payload3 = <<10, 20, 30, 40, 50, 60>>
-
-    assert interleave_binaries([payload1, payload2], 2) ==
-             <<227, 2, 7, 8, 3, 4, 9, 10, 5, 6, 11, 12>>
-
-    assert interleave_binaries(
-             [payload1, payload2, payload3],
-             2
-           ) ==
-             <<227, 2, 7, 8, 10, 20, 3, 4, 9, 10, 30, 40, 5, 6, 11, 12, 50, 60>>
-
-    assert interleave_binaries(
-             [payload1, payload2, payload3],
-             3
-           ) ==
-             <<227, 2, 3, 7, 8, 9, 10, 20, 30, 4, 5, 6, 10, 11, 12, 40, 50, 60>>
-  end
-
-  test "split binaries in reversed chunks" do
-    assert DoInterleave.to_chunks_reversed(<<1, 2, 3, 4>>, 2) == [<<3, 4>>, <<1, 2>>]
-    assert DoInterleave.to_chunks_reversed(<<1, 2, 3, 4>>, 3) == [<<4>>, <<1, 2, 3>>]
-    assert DoInterleave.to_chunks_reversed(<<1, 2, 3>>, 1) == [<<3>>, <<2>>, <<1>>]
-    assert DoInterleave.to_chunks_reversed(<<1>>, 1) == [<<1>>]
-    assert DoInterleave.to_chunks_reversed(<<>>, 1) == [<<>>]
   end
 end
