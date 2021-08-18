@@ -9,7 +9,7 @@ defmodule Membrane.AudioMixer.DoInterleave do
   (all queues must be at least `bytes_per_channel` long),
   and interleave them.
   """
-  @spec interleave(pos_integer(), pos_integer(), %{}, [integer()]) :: {any, map}
+  @spec interleave(pos_integer(), pos_integer(), %{}, [integer()]) :: {any(), map()}
   def interleave(bytes_per_channel, _sample_size, pads, _order) when map_size(pads) == 1 do
     [{pad, data}] = Map.to_list(pads)
 
