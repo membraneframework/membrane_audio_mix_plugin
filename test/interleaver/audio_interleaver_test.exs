@@ -40,7 +40,7 @@ defmodule Membrane.AudioInterleaverTest do
       end)
       |> Enum.concat(
         interleaver: %Membrane.AudioInterleaver{
-          caps: %Caps{
+          input_caps: %Caps{
             channels: 1,
             sample_rate: 16_000,
             format: audio_format
