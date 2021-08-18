@@ -30,7 +30,7 @@ during mixer's work.
 Mixing and interleaving is tested only for integer audio formats.
 ### Mixer
 
-Provided element adds samples from all pads and clips the result to the maximum value for given 
+The Mixer adds samples from all pads and clips the result to the maximum value for given 
 format to avoid overflow.
 
 Input pads can have offset - it tells how much silence should be added before first sample
