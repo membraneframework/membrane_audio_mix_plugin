@@ -23,23 +23,20 @@ defmodule Membrane.DdInterleaveTest do
 
       order = [1, 2]
       bytes_per_channel = 4
-
-      interleaved1 = <<1, 90, 2, 100, 3, 110, 4, 120>>
-      interleaved2 = <<1, 2, 90, 100, 3, 4, 110, 120>>
-      interleaved3 = <<1, 2, 3, 90, 100, 110, 4, 120>>
-      interleaved4 = <<1, 2, 3, 4, 90, 100, 110, 120>>
-
       new_pads = Map.new([to_pad(1, <<5, 6, 7, 8>>), to_pad(2, <<130, 140, 150, 160>>)])
 
-      expected1 = {interleaved1, new_pads}
-      expected2 = {interleaved2, new_pads}
-      expected3 = {interleaved3, new_pads}
-      expected4 = {interleaved4, new_pads}
+      # tuples {sample_size, expected_binary}
+      cases = [
+        {1, <<1, 90, 2, 100, 3, 110, 4, 120>>},
+        {2, <<1, 2, 90, 100, 3, 4, 110, 120>>},
+        {3, <<1, 2, 3, 90, 100, 110, 4, 120>>},
+        {4, <<1, 2, 3, 4, 90, 100, 110, 120>>}
+      ]
 
-      assert expected1 == DoInterleave.interleave(bytes_per_channel, 1, pads, order)
-      assert expected2 == DoInterleave.interleave(bytes_per_channel, 2, pads, order)
-      assert expected3 == DoInterleave.interleave(bytes_per_channel, 3, pads, order)
-      assert expected4 == DoInterleave.interleave(bytes_per_channel, 4, pads, order)
+      Enum.each(cases, fn {sample_size, expected_binary} ->
+        expected = {expected_binary, new_pads}
+        assert expected == DoInterleave.interleave(bytes_per_channel, sample_size, pads, order)
+      end)
     end
 
     test "interleave in correct order" do

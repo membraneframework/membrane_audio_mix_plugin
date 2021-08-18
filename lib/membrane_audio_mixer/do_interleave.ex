@@ -29,8 +29,6 @@ defmodule Membrane.AudioMixer.DoInterleave do
   end
 
   #  Interleave binaries, taking `sample_size` bytes at a time.
-  defp interleave_binaries(payloads, sample_size)
-
   defp interleave_binaries(payloads, sample_size) do
     payloads
     # split each channel's payload into `sample_size` chunks (channels order is reversed)
@@ -50,7 +48,7 @@ defmodule Membrane.AudioMixer.DoInterleave do
   end
 
   defp to_chunks_reversed(binary, chunk_size, acc) do
-    <<chunk::binary-size(chunk_size), rest::bitstring>> = binary
+    <<chunk::binary-size(chunk_size)>> <> rest = binary
     to_chunks_reversed(rest, chunk_size, [<<chunk::binary-size(chunk_size)>> | acc])
   end
 
