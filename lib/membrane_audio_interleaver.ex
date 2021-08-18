@@ -1,11 +1,11 @@
 defmodule Membrane.AudioInterleaver do
   @moduledoc """
   Element responsible for interleaving several mono audio streams into single interleaved stream.
-  All input streams should be in the same raw audio format, defined by 'caps' option.
+  All input streams should be in the same raw audio format, defined by `caps` option.
 
-  Channels are interleaved in order given in 'order' option - currently required, no default available.
+  Channels are interleaved in order given in `order` option - currently required, no default available.
 
-  Each input pad should be identified with your custom id (using 'via_in(Pad.ref(:input, your_example_id)' )
+  Each input pad should be identified with your custom id (using `via_in(Pad.ref(:input, your_example_id)` )
   """
 
   use Membrane.Filter
