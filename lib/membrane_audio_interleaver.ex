@@ -13,13 +13,13 @@ defmodule Membrane.AudioInterleaver do
 
   alias Membrane.AudioMixer.DoInterleave
   alias Membrane.Buffer
-  alias Membrane.Caps.Audio.Raw, as: Caps
+  alias Membrane.Caps.Audio.Raw
 
   require Membrane.Logger
 
   def_options input_caps: [
                 type: :struct,
-                spec: Caps.t(),
+                spec: Raw.t(),
                 description: """
                 The value defines a raw audio format of pads connected to the
                 element. It should be the same for all the pads.
@@ -46,13 +46,13 @@ defmodule Membrane.AudioInterleaver do
   def_output_pad :output,
     mode: :pull,
     availability: :always,
-    caps: Caps
+    caps: Raw
 
   def_input_pad :input,
     mode: :pull,
     availability: :on_request,
     demand_unit: :bytes,
-    caps: Caps
+    caps: {Raw, channels: 1}
 
   @impl true
   def handle_init(%__MODULE__{} = options) do
@@ -70,13 +70,7 @@ defmodule Membrane.AudioInterleaver do
 
   @impl true
   def handle_pad_added(pad, _context, state) do
-    state =
-      Bunch.Access.put_in(
-        state,
-        [:pads, pad],
-        %{queue: <<>>, stream_ended: false}
-      )
-
+    state = put_in(state, [:pads, pad], %{queue: <<>>, stream_ended: false})
     {:ok, state}
   end
 
@@ -89,9 +83,9 @@ defmodule Membrane.AudioInterleaver do
   @impl true
   def handle_prepared_to_playing(
         _context,
-        %{input_caps: %Caps{} = input_caps, channels: channels} = state
+        %{input_caps: %Raw{} = input_caps, channels: channels} = state
       ) do
-    {{:ok, caps: {:output, %Caps{input_caps | channels: channels}}}, state}
+    {{:ok, caps: {:output, %Raw{input_caps | channels: channels}}}, state}
   end
 
   @impl true
@@ -105,6 +99,11 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
+  def handle_demand(:output, _buffers_count, :buffers, _context, %{input_caps: nil} = state) do
+    {:ok, state}
+  end
+
+  @impl true
   def handle_demand(
         :output,
         buffers_count,
@@ -112,43 +111,32 @@ defmodule Membrane.AudioInterleaver do
         _context,
         %{frames_per_buffer: frames, input_caps: input_caps} = state
       ) do
-    case input_caps do
-      nil ->
-        {:ok, state}
+    size = buffers_count * Raw.frames_to_bytes(frames, input_caps)
+    do_handle_demand(size, state)
+  end
 
-      _caps ->
-        size = buffers_count * Caps.frames_to_bytes(frames, input_caps)
-
-        do_handle_demand(size, state)
-    end
+  @impl true
+  def handle_end_of_stream(_pad, _context, %{finished: true} = state) do
+    {:ok, state}
   end
 
   @impl true
   def handle_end_of_stream(pad, _context, %{input_caps: input_caps} = state) do
-    if state.finished do
-      # end of stream already sent
-      {:ok, state}
-    else
-      sample_size = Caps.sample_size(input_caps)
+    sample_size = Raw.sample_size(input_caps)
 
-      state =
-        case Bunch.Access.get_in(state, [:pads, pad]) do
-          %{queue: queue} when byte_size(queue) < sample_size ->
-            %{state | finished: true}
+    state =
+      case Bunch.Access.get_in(state, [:pads, pad]) do
+        %{queue: queue} when byte_size(queue) < sample_size ->
+          %{state | finished: true}
 
-          _state ->
-            Bunch.Access.update_in(
-              state,
-              [:pads, pad],
-              &%{&1 | stream_ended: true}
-            )
-        end
-
-      if state.finished do
-        {{:ok, end_of_stream: :output}, state}
-      else
-        interleave_and_return(state)
+        _state ->
+          put_in(state, [:pads, pad, :stream_ended], true)
       end
+
+    if state.finished do
+      {{:ok, end_of_stream: :output}, state}
+    else
+      interleave_and_return(state)
     end
   end
 
@@ -160,65 +148,59 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
+  def handle_process(_pad, _buffer, _context, %{finished: true} = state) do
+    {:ok, state}
+  end
+
+  @impl true
   def handle_process(
         pad,
-        %Buffer{payload: payload} = _buffer,
+        %Buffer{payload: payload},
         _context,
         %{input_caps: input_caps} = state
       ) do
-    if state.finished do
-      {:ok, state}
-    else
-      {new_queue_size, state} = add_payload(payload, pad, state)
+    {new_queue_size, state} = enqueue_payload(payload, pad, state)
 
-      if new_queue_size >= Caps.sample_size(input_caps) do
-        interleave_and_return(state)
-      else
-        {{:ok, redemand: :output}, state}
-      end
+    if new_queue_size >= Raw.sample_size(input_caps) do
+      interleave_and_return(state)
+    else
+      {{:ok, redemand: :output}, state}
     end
   end
 
   @impl true
+  def handle_caps(_pad, input_caps, _context, %{input_caps: nil} = state) do
+    state = %{state | input_caps: input_caps}
+
+    {{:ok, caps: {:output, %{input_caps | channels: state.channels}}, redemand: :output}, state}
+  end
+
+  @impl true
+  def handle_caps(_pad, input_caps, _context, %{input_caps: input_caps} = state) do
+    {:ok, state}
+  end
+
+  @impl true
   def handle_caps(pad, input_caps, _context, state) do
-    case state.input_caps do
-      nil ->
-        state = %{state | input_caps: input_caps}
+    raise(
+      RuntimeError,
+      "received invalid caps on pad #{inspect(pad)}, expected: #{inspect(state.input_caps)}, got: #{inspect(input_caps)}"
+    )
+  end
 
-        {{:ok, caps: {:output, %{input_caps | channels: state.channels}}, redemand: :output},
-         state}
-
-      ^input_caps ->
-        {:ok, state}
-
-      _invalid_caps ->
-        raise(
-          RuntimeError,
-          "received invalid caps on pad #{inspect(pad)}, expected: #{inspect(state.input_caps)}, got: #{inspect(input_caps)}"
-        )
-    end
+  defp do_handle_demand(_size, %{finished: true} = state) do
+    {:ok, state}
   end
 
   # send demand to input pads where current queue is not long enough
   defp do_handle_demand(size, %{pads: pads} = state) do
-    if state.finished do
-      {:ok, state}
-    else
-      demands =
-        Enum.map(
-          pads,
-          fn {pad, %{queue: queue}} ->
-            demand_size =
-              queue
-              |> byte_size()
-              |> then(&max(0, size - &1))
-
-            {:demand, {pad, demand_size}}
-          end
-        )
-
-      {{:ok, demands}, state}
-    end
+    pads
+    |> Enum.map(fn {pad, %{queue: queue}} ->
+      queue
+      |> byte_size()
+      |> then(&{:demand, {pad, max(0, size - &1)}})
+    end)
+    |> then(fn demands -> {{:ok, demands}, state} end)
   end
 
   # try to interleave channels and formulate proper element callback return message
@@ -232,7 +214,7 @@ defmodule Membrane.AudioInterleaver do
 
   # interleave channels only if all queues are long enough (have at least `sample_size` size)
   defp try_interleave(%{input_caps: input_caps, pads: pads, order: order} = state) do
-    sample_size = Caps.sample_size(input_caps)
+    sample_size = Raw.sample_size(input_caps)
 
     min_length =
       pads
@@ -276,12 +258,14 @@ defmodule Membrane.AudioInterleaver do
   end
 
   # add payload to proper pad's queue
-  defp add_payload(payload, pad, %{pads: pads} = state) do
+  defp enqueue_payload(payload, pad_key, %{pads: pads} = state) do
     {new_queue_size, pads} =
-      Bunch.Access.get_and_update_in(
+      Map.get_and_update(
         pads,
-        [pad, :queue],
-        &{byte_size(&1 <> payload), &1 <> payload}
+        pad_key,
+        fn %{queue: queue} = pad ->
+          {byte_size(queue) + byte_size(payload), %{pad | queue: queue <> payload}}
+        end
       )
 
     {new_queue_size, %{state | pads: pads}}
