@@ -41,7 +41,7 @@ This element joins several mono audio streams (with one channel) into one stream
 
 If audio streams have different size, longer stream is clipped.
 
-Input pads have to be named by the user, and interleaving order must be provided (see example usage).
+Each channel must be named by providing an input pad name and the channel layout using those names must be provided (see [usage example](#audiointerleaver)).
 
 ## Usage Example
 ### AudioMixer
