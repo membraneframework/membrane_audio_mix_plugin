@@ -69,6 +69,12 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
+  def handle_pad_added(_pad, %{playback_state: playback_state} = _context, _state)
+      when playback_state != :stopped do
+    raise("All pads should be connected before starting the element!")
+  end
+
+  @impl true
   def handle_pad_added(pad, _context, state) do
     state = put_in(state, [:pads, pad], %{queue: <<>>, stream_ended: false})
     {:ok, state}
