@@ -142,7 +142,13 @@ defmodule Membrane.AudioInterleaver do
     if state.finished do
       {{:ok, end_of_stream: :output}, state}
     else
-      interleave_and_return(state)
+      case try_interleave(state) do
+        {:finished, {buffer, state}} ->
+          {{:ok, buffer: buffer, end_of_stream: :output}, state}
+
+        {:ok, {buffer, state}} ->
+          {{:ok, buffer: buffer}, state}
+      end
     end
   end
 
@@ -168,7 +174,13 @@ defmodule Membrane.AudioInterleaver do
     {new_queue_size, state} = enqueue_payload(payload, pad, state)
 
     if new_queue_size >= Raw.sample_size(input_caps) do
-      interleave_and_return(state)
+      case try_interleave(state) do
+        {:finished, {buffer, state}} ->
+          {{:ok, buffer: buffer, end_of_stream: :output}, state}
+
+        {:ok, {buffer, state}} ->
+          {{:ok, buffer: buffer}, state}
+      end
     else
       {{:ok, redemand: :output}, state}
     end
@@ -209,15 +221,6 @@ defmodule Membrane.AudioInterleaver do
     |> then(fn demands -> {{:ok, demands}, state} end)
   end
 
-  # try to interleave channels and formulate proper element callback return message
-  defp interleave_and_return(state) do
-    case try_interleave(state) do
-      :none -> {:ok, state}
-      {:finished, {buffer, state}} -> {{:ok, buffer: buffer, end_of_stream: :output}, state}
-      {:ok, {buffer, state}} -> {{:ok, buffer: buffer}, state}
-    end
-  end
-
   # interleave channels only if all queues are long enough (have at least `sample_size` size)
   defp try_interleave(%{input_caps: input_caps, pads: pads, order: order} = state) do
     sample_size = Raw.sample_size(input_caps)
@@ -238,7 +241,7 @@ defmodule Membrane.AudioInterleaver do
         {:ok, {buffer, state}}
       end
     else
-      :none
+      {:ok, {{:output, []}, state}}
     end
   end
 
