@@ -39,7 +39,7 @@ from that pad. Offset has to be positive.
 
 This element joins several mono audio streams (with one channel) into one stream with interleaved channels.
 
-If audio streams have different size, longer stream is clipped.
+If audio streams have different durations, the longer stream is clipped.
 
 Each channel must be named by providing an input pad name and the channel layout using those names must be provided (see [usage example](#audiointerleaver)).
 
