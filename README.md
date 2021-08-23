@@ -21,20 +21,22 @@ Add the following line to your `deps` in `mix.exs`. Run `mix deps.get`.
 Both elements operate only on raw audio (PCM), so some parser may be needed to precede them in a pipeline.
 
 Audio format can be set as an element option or received through caps from input pads. All
-caps received from input pads have to be identical and match ones in element option (if that 
+caps received from input pads have to be identical and match ones in element option (if that
 option is different from `nil`).
 
 All inputs have to be added before starting the pipeline and should not be changed
 during mixer's work.
 
 Mixing and interleaving is tested only for integer audio formats.
+
 ### Mixer
 
-The Mixer adds samples from all pads and clips the result to the maximum value for given 
+The Mixer adds samples from all pads and clips the result to the maximum value for given
 format to avoid overflow.
 
 Input pads can have offset - it tells how much silence should be added before first sample
 from that pad. Offset has to be positive.
+
 ### Interleaver
 
 This element joins several mono audio streams (with one channel) into one stream with interleaved channels.
@@ -44,7 +46,9 @@ If audio streams have different durations, the longer stream is clipped.
 Each channel must be named by providing an input pad name and the channel layout using those names must be provided (see [usage example](#audiointerleaver)).
 
 ## Usage Example
+
 ### AudioMixer
+
 ```elixir
 defmodule Mixing.Pipeline do
   use Membrane.Pipeline
@@ -82,7 +86,9 @@ defmodule Mixing.Pipeline do
   end
 end
 ```
+
 ### AudioInterleaver
+
 ```elixir
 defmodule Interleave.Pipeline do
   use Membrane.Pipeline
