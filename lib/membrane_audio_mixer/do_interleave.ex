@@ -3,8 +3,9 @@ defmodule Membrane.AudioMixer.DoInterleave do
   Module responsible for interleaving audio tracks (all in the same format, with 1
   channel) in a given order.
   """
-  require Membrane.Pad
   alias Membrane.Pad
+
+  require Membrane.Pad
 
   @doc """
   Order queues according to `order`, take `bytes_per_channel` from each queue
