@@ -17,14 +17,14 @@ defmodule Membrane.AudioMixer do
 
   alias Membrane.AudioMixer.DoMix
   alias Membrane.Buffer
-  alias Membrane.Caps.Audio.Raw, as: Caps
+  alias Membrane.Caps.Audio.Raw
   alias Membrane.Time
 
   require Membrane.Logger
 
   def_options caps: [
                 type: :struct,
-                spec: Caps.t(),
+                spec: Raw.t(),
                 description: """
                 The value defines a raw audio format of pads connected to the
                 element. It should be the same for all the pads.
@@ -44,13 +44,13 @@ defmodule Membrane.AudioMixer do
   def_output_pad :output,
     mode: :pull,
     availability: :always,
-    caps: Caps
+    caps: Raw
 
   def_input_pad :input,
     mode: :pull,
     availability: :on_request,
     demand_unit: :bytes,
-    caps: Caps,
+    caps: Raw,
     options: [
       offset: [
         spec: Time.t(),
@@ -89,7 +89,7 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_prepared_to_playing(_context, %{caps: %Caps{} = caps} = state) do
+  def handle_prepared_to_playing(_context, %{caps: %Raw{} = caps} = state) do
     {{:ok, caps: {:output, caps}}, state}
   end
 
@@ -103,6 +103,11 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
+  def handle_demand(:output, _buffers_count, :buffers, _context, %{caps: nil} = state) do
+    {:ok, state}
+  end
+
+  @impl true
   def handle_demand(
         :output,
         buffers_count,
@@ -110,21 +115,14 @@ defmodule Membrane.AudioMixer do
         _context,
         %{frames_per_buffer: frames, caps: caps} = state
       ) do
-    case caps do
-      nil ->
-        {:ok, state}
-
-      _caps ->
-        size = buffers_count * Caps.frames_to_bytes(frames, caps)
-
-        do_handle_demand(size, state)
-    end
+    size = buffers_count * Raw.frames_to_bytes(frames, caps)
+    do_handle_demand(size, state)
   end
 
   @impl true
   def handle_start_of_stream(pad, context, state) do
     offset = context.pads[pad].options.offset
-    silence = Caps.sound_of_silence(state.caps, offset)
+    silence = Raw.sound_of_silence(state.caps, offset)
 
     state =
       Bunch.Access.update_in(
@@ -176,18 +174,20 @@ defmodule Membrane.AudioMixer do
 
   @impl true
   def handle_process(
-        pad,
-        %Buffer{payload: payload} = _buffer,
+        pad_ref,
+        %Buffer{payload: payload},
         _context,
         %{caps: caps, pads: pads} = state
       ) do
-    time_frame = Caps.frame_size(caps)
+    time_frame = Raw.frame_size(caps)
 
     {size, pads} =
-      Bunch.Access.get_and_update_in(
+      Map.get_and_update(
         pads,
-        [pad, :queue],
-        &{byte_size(&1 <> payload), &1 <> payload}
+        pad_ref,
+        fn %{queue: queue} = pad ->
+          {byte_size(queue) + byte_size(payload), %{pad | queue: queue <> payload}}
+        end
       )
 
     if size >= time_frame do
@@ -199,42 +199,36 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
+  def handle_caps(_pad, caps, _context, %{caps: nil} = state) do
+    state = %{state | caps: caps}
+    {{:ok, caps: {:output, caps}, redemand: :output}, state}
+  end
+
+  @impl true
+  def handle_caps(_pad, caps, _context, %{caps: caps} = state) do
+    {:ok, state}
+  end
+
+  @impl true
   def handle_caps(pad, caps, _context, state) do
-    case state.caps do
-      nil ->
-        state = %{state | caps: caps}
-        {{:ok, caps: {:output, caps}, redemand: :output}, state}
-
-      ^caps ->
-        {:ok, state}
-
-      _invalid_caps ->
-        raise(
-          RuntimeError,
-          "received invalid caps on pad #{inspect(pad)}, expected: #{inspect(state.caps)}, got: #{inspect(caps)}"
-        )
-    end
+    raise(
+      RuntimeError,
+      "received invalid caps on pad #{inspect(pad)}, expected: #{inspect(state.caps)}, got: #{inspect(caps)}"
+    )
   end
 
   defp do_handle_demand(size, %{pads: pads} = state) do
-    demands =
-      Enum.map(
-        pads,
-        fn {pad, %{queue: queue}} ->
-          demand_size =
-            queue
-            |> byte_size()
-            |> then(&max(0, size - &1))
-
-          {:demand, {pad, demand_size}}
-        end
-      )
-
-    {{:ok, demands}, state}
+    pads
+    |> Enum.map(fn {pad, %{queue: queue}} ->
+      queue
+      |> byte_size()
+      |> then(&{:demand, {pad, max(0, size - &1)}})
+    end)
+    |> then(fn demands -> {{:ok, demands}, state} end)
   end
 
   defp mix_and_get_buffer(%{caps: caps, pads: pads} = state) do
-    time_frame = Caps.frame_size(caps)
+    time_frame = Raw.frame_size(caps)
     mix_size = get_mix_size(pads, time_frame)
 
     {payload, state} =
