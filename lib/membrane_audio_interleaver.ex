@@ -75,6 +75,12 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
+  def handle_pad_added(_pad, %{playback_state: playback_state}, _state) do
+    raise("All pads should be connected before starting the element!
+      Pad added event received in playback state #{playback_state}.")
+  end
+
+  @impl true
   def handle_pad_removed(pad, _context, state) do
     state = Bunch.Access.delete_in(state, [:pads, pad])
     {:ok, state}
