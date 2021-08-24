@@ -69,13 +69,7 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
-  def handle_pad_added(_pad, %{playback_state: playback_state} = _context, _state)
-      when playback_state != :stopped do
-    raise("All pads should be connected before starting the element!")
-  end
-
-  @impl true
-  def handle_pad_added(pad, _context, state) do
+  def handle_pad_added(pad, %{playback_state: :stopped}, state) do
     state = put_in(state, [:pads, pad], %{queue: <<>>, stream_ended: false})
     {:ok, state}
   end
@@ -131,7 +125,7 @@ defmodule Membrane.AudioInterleaver do
     sample_size = Raw.sample_size(input_caps)
 
     state =
-      case Bunch.Access.get_in(state, [:pads, pad]) do
+      case get_in(state, [:pads, pad]) do
         %{queue: queue} when byte_size(queue) < sample_size ->
           %{state | finished: true}
 
@@ -210,7 +204,7 @@ defmodule Membrane.AudioInterleaver do
     {:ok, state}
   end
 
-  # send demand to input pads where current queue is not long enough
+  # send demand to input pads that don't have a long enough queue
   defp do_handle_demand(size, %{pads: pads} = state) do
     pads
     |> Enum.map(fn {pad, %{queue: queue}} ->
