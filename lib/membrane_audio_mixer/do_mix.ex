@@ -5,7 +5,7 @@ defmodule Membrane.AudioMixer.DoMix do
   If overflow happens during mixing, it is being clipped to the max value of sample in this format.
   """
 
-  alias Membrane.Caps.Audio.Raw, as: Caps
+  alias Membrane.Caps.Audio.Raw
 
   @doc """
   Mixes `buffers` to one buffer. Given buffers should have equal sizes. It uses information about
@@ -13,7 +13,7 @@ defmodule Membrane.AudioMixer.DoMix do
   """
   @spec mix([binary()], Membrane.Caps.Audio.Raw.t()) :: binary()
   def mix(buffers, caps) do
-    sample_size = Caps.sample_size(caps)
+    sample_size = Raw.sample_size(caps)
 
     buffer =
       buffers
@@ -27,10 +27,10 @@ defmodule Membrane.AudioMixer.DoMix do
   end
 
   defp clipper_factory(caps) do
-    max_sample_value = Caps.sample_max(caps)
+    max_sample_value = Raw.sample_max(caps)
 
-    if Caps.signed?(caps) do
-      min_sample_value = Caps.sample_min(caps)
+    if Raw.signed?(caps) do
+      min_sample_value = Raw.sample_min(caps)
 
       fn sample ->
         cond do
@@ -55,13 +55,13 @@ defmodule Membrane.AudioMixer.DoMix do
   defp do_mix([], %{caps: caps, clipper: clipper}, acc) do
     acc
     |> clipper.()
-    |> Caps.value_to_sample(caps)
+    |> Raw.value_to_sample(caps)
   end
 
   defp do_mix([sample | samples], %{caps: caps} = mix_params, acc) do
     acc =
       sample
-      |> Caps.sample_to_value(caps)
+      |> Raw.sample_to_value(caps)
       |> then(&(&1 + acc))
 
     do_mix(samples, mix_params, acc)
@@ -71,7 +71,7 @@ defmodule Membrane.AudioMixer.DoMix do
     {chunks, rests} =
       binaries
       |> Enum.flat_map(fn
-        <<chunk::binary-size(chunk_size)>> <> rest -> [{chunk, rest}]
+        <<chunk::binary-size(chunk_size), rest::binary>> -> [{chunk, rest}]
         _binary -> []
       end)
       |> Enum.unzip()
