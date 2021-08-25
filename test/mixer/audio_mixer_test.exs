@@ -4,7 +4,7 @@ defmodule Membrane.AudioMixerTest do
 
   import Membrane.Testing.Assertions
 
-  alias Membrane.Caps.Audio.Raw, as: Caps
+  alias Membrane.Caps.Audio.Raw
   alias Membrane.Testing.Pipeline
 
   @input_path_1 Path.expand("../fixtures/mixer/input-1.raw", __DIR__)
@@ -34,7 +34,7 @@ defmodule Membrane.AudioMixerTest do
       end)
       |> Enum.concat(
         mixer: %Membrane.AudioMixer{
-          caps: %Caps{
+          caps: %Raw{
             channels: 1,
             sample_rate: 16_000,
             format: audio_format
@@ -229,7 +229,7 @@ defmodule Membrane.AudioMixerTest do
     test "when they match and Mixer has its own caps" do
       output_path = prepare_output()
 
-      caps = %Caps{
+      caps = %Raw{
         channels: 2,
         sample_rate: 44_100,
         format: :s24le

@@ -12,7 +12,7 @@ defmodule Membrane.AudioMixer.DoMixTest do
 
   import Membrane.AudioMixer.DoMix
 
-  alias Membrane.Caps.Audio.Raw, as: Caps
+  alias Membrane.Caps.Audio.Raw
 
   require Membrane.Logger
 
@@ -29,7 +29,7 @@ defmodule Membrane.AudioMixer.DoMixTest do
     Enum.map(
       caps_contents,
       fn {channels, sample_rate, format} = _caps ->
-        %Caps{
+        %Raw{
           channels: channels,
           sample_rate: sample_rate,
           format: format
