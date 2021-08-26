@@ -52,7 +52,14 @@ defmodule Membrane.AudioInterleaver do
     mode: :pull,
     availability: :on_request,
     demand_unit: :bytes,
-    caps: {Raw, channels: 1}
+    caps: {Raw, channels: 1},
+    options: [
+      offset: [
+        spec: Time.t(),
+        default: 0,
+        description: "Offset of the input audio at the pad."
+      ]
+    ]
 
   @impl true
   def handle_init(%__MODULE__{} = options) do
@@ -119,6 +126,23 @@ defmodule Membrane.AudioInterleaver do
       ) do
     size = buffers_count * Raw.frames_to_bytes(frames, input_caps)
     do_handle_demand(size, state)
+  end
+
+  @impl true
+  def handle_start_of_stream(pad, context, state) do
+    offset = context.pads[pad].options.offset
+    silence = Raw.sound_of_silence(state.input_caps, offset)
+
+    state =
+      Bunch.Access.update_in(
+        state,
+        [:pads, pad],
+        &%{&1 | queue: silence}
+      )
+
+    demand_fun = &max(0, &1 - byte_size(silence))
+
+    {{:ok, demand: {pad, demand_fun}}, state}
   end
 
   @impl true
