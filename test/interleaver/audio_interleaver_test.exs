@@ -118,7 +118,7 @@ defmodule Membrane.AudioInterleaverTest do
       perform_test(elements, links, reference_path, output_path)
     end
 
-    test "two tracks with different size (cutting longer input) " do
+    test "two tracks with different size (appending shorter input) " do
       output_path = prepare_output()
 
       links = [
@@ -132,15 +132,35 @@ defmodule Membrane.AudioInterleaverTest do
       ]
 
       elements = create_elements([@in11, @in2], output_path, [1, 2])
-      perform_test(elements, links, expand_path("out12_size2.raw"), output_path)
+      perform_test(elements, links, expand_path("out112_size2.raw"), output_path)
 
       elements = create_elements([@in11, @in2], output_path, [1, 2], :s8)
-      perform_test(elements, links, expand_path("out12_size1.raw"), output_path)
+      perform_test(elements, links, expand_path("out112_size1.raw"), output_path)
+    end
+
+    test "tracks with offset" do
+      output_path = prepare_output()
+
+      links = [
+        link(:file_src_1)
+        |> via_in(Pad.ref(:input, 1), options: [offset: Membrane.Time.microseconds(125)])
+        |> to(:interleaver),
+        link(:file_src_2)
+        |> via_in(Pad.ref(:input, 2))
+        |> to(:interleaver)
+        |> to(:file_sink)
+      ]
+
+      elements = create_elements([@in1, @in2], output_path, [1, 2])
+      perform_test(elements, links, expand_path("out12_size2offset125.raw"), output_path)
+
+      elements = create_elements([@in1, @in2], output_path, [1, 2], :s8)
+      perform_test(elements, links, expand_path("out12_size1offset125.raw"), output_path)
     end
 
     test "3 tracks, varying size" do
       output_path = prepare_output()
-      reference_path = expand_path("out123_size2.raw")
+      reference_path = expand_path("out1123_size2.raw")
 
       elements = create_elements([@in11, @in2, @in3], output_path, [1, 2, 3])
 
