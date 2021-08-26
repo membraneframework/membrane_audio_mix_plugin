@@ -24,8 +24,11 @@ Audio format can be set as an element option or received through caps from input
 caps received from input pads have to be identical and match ones in element option (if that
 option is different from `nil`).
 
+Input pads can have offset - it tells how much silence should be added before first sample
+from that pad. Offset has to be positive.
+
 All inputs have to be added before starting the pipeline and should not be changed
-during mixer's work.
+during mixer's or interleaver's work.
 
 Mixing and interleaving is tested only for integer audio formats.
 
@@ -34,14 +37,11 @@ Mixing and interleaving is tested only for integer audio formats.
 The Mixer adds samples from all pads and clips the result to the maximum value for given
 format to avoid overflow.
 
-Input pads can have offset - it tells how much silence should be added before first sample
-from that pad. Offset has to be positive.
-
 ### Interleaver
 
 This element joins several mono audio streams (with one channel) into one stream with interleaved channels.
 
-If audio streams have different durations, the longer stream is clipped.
+If audio streams have different durations, all shorter streams are appended with silence to match the longest stream.
 
 Each channel must be named by providing an input pad name and the channel layout using those names must be provided (see [usage example](#audiointerleaver)).
 
