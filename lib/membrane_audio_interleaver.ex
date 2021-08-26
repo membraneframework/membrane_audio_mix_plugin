@@ -11,7 +11,7 @@ defmodule Membrane.AudioInterleaver do
   use Membrane.Filter
   use Bunch
 
-  alias Membrane.AudioMixer.DoInterleave
+  alias Membrane.AudioInterleaver.DoInterleave
   alias Membrane.Buffer
   alias Membrane.Caps.Audio.Raw
 
