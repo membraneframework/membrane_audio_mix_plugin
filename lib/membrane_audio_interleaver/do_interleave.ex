@@ -1,4 +1,4 @@
-defmodule Membrane.AudioMixer.DoInterleave do
+defmodule Membrane.AudioInterleaver.DoInterleave do
   @moduledoc """
   Module responsible for interleaving audio tracks (all in the same format, with 1
   channel) in a given order.

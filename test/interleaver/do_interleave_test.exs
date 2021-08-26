@@ -5,7 +5,7 @@ defmodule Membrane.DdInterleaveTest do
 
   use ExUnit.Case, async: true
 
-  alias Membrane.AudioMixer.DoInterleave
+  alias Membrane.AudioInterleaver.DoInterleave
 
   require Membrane.Logger
 
