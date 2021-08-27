@@ -234,7 +234,8 @@ defmodule Membrane.AudioInterleaver do
 
   # append silence to each queue shorter than min_length
   defp append_silence_if_needed(caps, pads, min_length) do
-    Enum.map(pads, fn {pad, %{queue: queue} = pad_value} ->
+    pads
+    |> Enum.map(fn {pad, %{queue: queue} = pad_value} ->
       {pad, %{pad_value | queue: do_append_silence(queue, min_length, caps)}}
     end)
     |> Map.new()
