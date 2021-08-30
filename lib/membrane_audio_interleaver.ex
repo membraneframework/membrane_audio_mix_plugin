@@ -140,8 +140,9 @@ defmodule Membrane.AudioInterleaver do
       )
 
     demand_fun = &max(0, &1 - byte_size(silence))
+    {buffer, state} = interleave(state, min_open_queue_size(state.pads))
 
-    {{:ok, demand: {pad, demand_fun}}, state}
+    {{:ok, demand: {pad, demand_fun}, buffer: buffer}, state}
   end
 
   @impl true

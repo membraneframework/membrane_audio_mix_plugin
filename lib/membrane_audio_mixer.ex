@@ -132,8 +132,9 @@ defmodule Membrane.AudioMixer do
       )
 
     demand_fun = &max(0, &1 - byte_size(silence))
+    {buffer, state} = mix_and_get_buffer(state)
 
-    {{:ok, demand: {pad, demand_fun}}, state}
+    {{:ok, demand: {pad, demand_fun}, buffer: buffer}, state}
   end
 
   @impl true
