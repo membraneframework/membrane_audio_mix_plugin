@@ -2,20 +2,20 @@ defmodule Membrane.AudioMixer.Mixfile do
   use Mix.Project
 
   @version "0.1.0"
-  @github_url "https://github.com/membraneframework/membrane_audio_mixer_plugin"
+  @github_url "https://github.com/membraneframework/membrane_audio_mix_plugin"
 
   def project do
     [
-      app: :membrane_audio_mixer_plugin,
+      app: :membrane_audio_mix_plugin,
       version: @version,
       elixir: "~> 1.12",
       compilers: Mix.compilers(),
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      description: "Plugin performing raw audio mixing.",
+      description: "Plugin performing raw audio mixing and interleaving.",
       package: package(),
-      name: "Membrane Audio Mixer plugin",
+      name: "Membrane Audio Mix plugin",
       source_url: @github_url,
       homepage_url: "https://membraneframework.org",
       docs: docs()
@@ -60,7 +60,7 @@ defmodule Membrane.AudioMixer.Mixfile do
       main: "readme",
       extras: ["README.md", "LICENSE"],
       source_ref: "v#{@version}",
-      nest_modules_by_prefix: [Membrane.AudioMixer]
+      nest_modules_by_prefix: []
     ]
   end
 end

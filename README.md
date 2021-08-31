@@ -1,8 +1,8 @@
-# Membrane Audio Mixer Plugin
+# Membrane Audio Mix Plugin
 
-[![Hex.pm](https://img.shields.io/hexpm/v/membrane_audio_mixer_plugin.svg)](https://hex.pm/packages/membrane_audio_mixer_plugin)
-[![API Docs](https://img.shields.io/badge/api-docs-yellow.svg?style=flat)](https://hexdocs.pm/membrane_audio_mixer_plugin/)
-[![CircleCI](https://circleci.com/gh/membraneframework/membrane_audio_mixer_plugin.svg?style=svg)](https://circleci.com/gh/membraneframework/membrane_audio_mixer_plugin)
+[![Hex.pm](https://img.shields.io/hexpm/v/membrane_audio_mix_plugin.svg)](https://hex.pm/packages/membrane_audio_mix_plugin)
+[![API Docs](https://img.shields.io/badge/api-docs-yellow.svg?style=flat)](https://hexdocs.pm/membrane_audio_mix_plugin/)
+[![CircleCI](https://circleci.com/gh/membraneframework/membrane_audio_mix_plugin.svg?style=svg)](https://circleci.com/gh/membraneframework/membrane_audio_mix_plugin)
 
 Plugin providing elements for mixing and interleaving raw audio frames.
 
@@ -13,7 +13,7 @@ It is a part of [Membrane Multimedia Framework](https://membraneframework.org).
 Add the following line to your `deps` in `mix.exs`. Run `mix deps.get`.
 
 ```elixir
-{:membrane_audio_mixer_plugin, "~> 0.1.0"}
+{:membrane_audio_mix_plugin, "~> 0.1.0"}
 ```
 
 ## Description
