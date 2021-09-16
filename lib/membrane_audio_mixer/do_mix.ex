@@ -5,6 +5,7 @@ defmodule Membrane.AudioMixer.DoMix do
   If overflow happens during mixing, it is being clipped to the max value of sample in this format.
   """
 
+  alias Membrane.AudioMixer.Helpers
   alias Membrane.Caps.Audio.Raw
 
   @doc """
@@ -17,7 +18,8 @@ defmodule Membrane.AudioMixer.DoMix do
 
     buffer =
       buffers
-      |> zip_longest_binary_by(sample_size, fn buf -> do_mix(buf, mix_params(caps)) end)
+      |> Helpers.zip_longest_binary_by(sample_size, fn buf -> do_mix(buf, mix_params(caps)) end)
+      |> IO.iodata_to_binary()
 
     buffer
   end
@@ -28,24 +30,13 @@ defmodule Membrane.AudioMixer.DoMix do
 
   defp clipper_factory(caps) do
     max_sample_value = Raw.sample_max(caps)
+    min_sample_value = Raw.sample_min(caps)
 
-    if Raw.signed?(caps) do
-      min_sample_value = Raw.sample_min(caps)
-
-      fn sample ->
-        cond do
-          sample > max_sample_value -> max_sample_value
-          sample < min_sample_value -> min_sample_value
-          true -> sample
-        end
-      end
-    else
-      fn sample ->
-        if sample > max_sample_value do
-          max_sample_value
-        else
-          sample
-        end
+    fn sample ->
+      cond do
+        sample > max_sample_value -> max_sample_value
+        sample < min_sample_value -> min_sample_value
+        true -> sample
       end
     end
   end
@@ -65,25 +56,5 @@ defmodule Membrane.AudioMixer.DoMix do
       |> then(&(&1 + acc))
 
     do_mix(samples, mix_params, acc)
-  end
-
-  defp zip_longest_binary_by(binaries, chunk_size, zipper, acc \\ []) do
-    {chunks, rests} =
-      binaries
-      |> Enum.flat_map(fn
-        <<chunk::binary-size(chunk_size), rest::binary>> -> [{chunk, rest}]
-        _binary -> []
-      end)
-      |> Enum.unzip()
-
-    case chunks do
-      [] ->
-        acc
-        |> Enum.reverse()
-        |> IO.iodata_to_binary()
-
-      _chunks ->
-        zip_longest_binary_by(rests, chunk_size, zipper, [zipper.(chunks) | acc])
-    end
   end
 end
