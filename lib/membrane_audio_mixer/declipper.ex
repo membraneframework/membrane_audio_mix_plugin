@@ -1,5 +1,9 @@
 defmodule Membrane.AudioMixer.Declipper do
-  @moduledoc false
+  @moduledoc """
+  Module responsible for mixing audio tracks (all in the same format, with the same number of
+  channels and sample rate). Result is a single path in the format mixed paths are encoded in.
+  If overflow happens during mixing, overflowed wave will be scaled down to the max sample value.
+  """
 
   alias Membrane.AudioMixer.Helpers
   alias Membrane.Caps.Audio.Raw
@@ -8,15 +12,19 @@ defmodule Membrane.AudioMixer.Declipper do
     @moduledoc false
 
     @enforce_keys [:caps]
-    defstruct @enforce_keys ++ [is_wave_positive: true, values: []]
+    defstruct @enforce_keys ++ [is_wave_positive: true, queue: []]
 
     @type t :: %__MODULE__{
             caps: Raw.t(),
             is_wave_positive: boolean(),
-            values: [integer()]
+            queue: [integer()]
           }
   end
 
+  @doc """
+  Mixes `buffers` to one buffer. Given buffers should have equal sizes. It uses information about
+  samples provided in `caps`.
+  """
   @spec mix([binary()], boolean(), State.t()) :: {binary(), State.t()}
   def mix(buffers, last_wave, %State{caps: caps} = state) do
     sample_size = Raw.sample_size(caps)
@@ -37,7 +45,7 @@ defmodule Membrane.AudioMixer.Declipper do
     {values, rest} = Enum.split_while(values, split_fun)
 
     if !last_wave && rest == [] do
-      state = %State{state | values: state.values ++ values}
+      state = %State{state | queue: state.queue ++ values}
       {buffer, state}
     else
       buffer = buffer <> get_buffer(values, state)
@@ -45,7 +53,7 @@ defmodule Membrane.AudioMixer.Declipper do
       state =
         state
         |> Map.put(:is_wave_positive, !state.is_wave_positive)
-        |> Map.put(:values, [])
+        |> Map.put(:queue, [])
 
       if last_wave && rest == [] do
         {buffer, state}
@@ -55,10 +63,10 @@ defmodule Membrane.AudioMixer.Declipper do
     end
   end
 
-  defp get_buffer([], %State{values: []}), do: <<>>
+  defp get_buffer([], %State{queue: []}), do: <<>>
 
-  defp get_buffer(new_values, %State{caps: caps, values: values}) do
-    (values ++ new_values)
+  defp get_buffer(values, %State{caps: caps, queue: queue}) do
+    (queue ++ values)
     |> scale(caps)
     |> Enum.map(&Raw.value_to_sample(&1, caps))
     |> IO.iodata_to_binary()
