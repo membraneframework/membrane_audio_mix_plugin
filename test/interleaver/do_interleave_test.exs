@@ -5,9 +5,9 @@ defmodule Membrane.DdInterleaveTest do
 
   use ExUnit.Case, async: true
 
-  alias Membrane.AudioInterleaver.DoInterleave
-
   require Membrane.Logger
+
+  alias Membrane.AudioInterleaver.DoInterleave
 
   describe "DoInterleaver interleave should" do
     defp to_pad(key, queue) do

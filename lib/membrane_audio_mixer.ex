@@ -15,14 +15,14 @@ defmodule Membrane.AudioMixer do
   use Membrane.Filter
   use Bunch
 
+  require Membrane.Logger
+
   alias Membrane.AudioMixer.Declipper
   alias Membrane.AudioMixer.DoMix
   alias Membrane.Buffer
   alias Membrane.Caps.Audio.Raw
   alias Membrane.Caps.Matcher
   alias Membrane.Time
-
-  require Membrane.Logger
 
   @supported_caps {Raw,
                    format: Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])}
