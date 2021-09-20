@@ -208,8 +208,11 @@ defmodule Membrane.AudioMixer do
       )
 
     if size >= time_frame do
-      {buffer, state} = mix_and_get_buffer(%{state | pads: pads})
-      {{:ok, buffer: buffer}, state}
+      {{_pad, %Buffer{payload: payload}} = buffer, state} =
+        mix_and_get_buffer(%{state | pads: pads})
+
+      actions = [buffer: buffer] ++ if payload == <<>>, do: [redemand: :output], else: []
+      {{:ok, actions}, state}
     else
       {{:ok, redemand: :output}, %{state | pads: pads}}
     end
@@ -217,12 +220,7 @@ defmodule Membrane.AudioMixer do
 
   @impl true
   def handle_caps(_pad, caps, _context, %{caps: nil} = state) do
-    declipper =
-      if state.declipper do
-        %Declipper.State{caps: caps}
-      else
-        false
-      end
+    declipper = if state.declipper, do: %Declipper.State{caps: caps}, else: false
 
     state =
       state
@@ -260,7 +258,7 @@ defmodule Membrane.AudioMixer do
     mix_size = get_mix_size(pads, time_frame)
 
     {payload, state} =
-      if mix_size >= time_frame do
+      if mix_size >= time_frame || last_declipper_wave?(state) do
         {payload, pads, state} = mix(pads, mix_size, state)
         pads = remove_finished_pads(pads, time_frame)
 
@@ -288,7 +286,7 @@ defmodule Membrane.AudioMixer do
     number - rest
   end
 
-  defp mix(pads, mix_size, state) when map_size(pads) == 1 do
+  defp mix(pads, mix_size, %{declipper: false} = state) when map_size(pads) == 1 do
     [{pad, data}] = Map.to_list(pads)
 
     <<payload::binary-size(mix_size)>> <> queue = data.queue
@@ -311,6 +309,16 @@ defmodule Membrane.AudioMixer do
     {payload, pads, state}
   end
 
+  defp all_streams_ended?(%{pads: pads}) do
+    pads
+    |> Enum.map(fn {_pad, %{stream_ended: stream_ended}} -> stream_ended end)
+    |> Enum.all?()
+  end
+
+  defp last_declipper_wave?(%{declipper: declipper} = state) do
+    declipper != false && all_streams_ended?(state)
+  end
+
   defp remove_finished_pads(pads, time_frame) do
     pads
     |> Enum.flat_map(fn
@@ -321,8 +329,8 @@ defmodule Membrane.AudioMixer do
   end
 
   defp mix_payloads(payloads, %{declipper: %Declipper.State{} = declipper} = state) do
-    last_wave = all_streams_ended?(state)
-    {payload, declipper} = Declipper.mix(payloads, last_wave, declipper)
+    all_ended = all_streams_ended?(state)
+    {payload, declipper} = Declipper.mix(payloads, all_ended, declipper)
     state = Map.put(state, :declipper, declipper)
 
     {payload, state}
@@ -331,11 +339,5 @@ defmodule Membrane.AudioMixer do
   defp mix_payloads(payloads, state) do
     payload = DoMix.mix(payloads, state.caps)
     {payload, state}
-  end
-
-  defp all_streams_ended?(%{pads: pads}) do
-    pads
-    |> Enum.map(fn {_pad, %{stream_ended: stream_ended}} -> stream_ended end)
-    |> Enum.all?()
   end
 end

@@ -66,7 +66,6 @@ defmodule Membrane.AudioMixer.Declipper do
 
   defp scale(values, caps) do
     {min, max} = Enum.min_max(values)
-
     max_sample_value = Raw.sample_max(caps)
     min_sample_value = Raw.sample_min(caps)
 
