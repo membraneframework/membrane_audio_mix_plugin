@@ -8,8 +8,8 @@ defmodule Membrane.AudioInterleaverTest do
 
   import Membrane.Testing.Assertions
 
-  alias Membrane.Testing.Pipeline
   alias Membrane.Caps.Audio.Raw, as: Caps
+  alias Membrane.Testing.Pipeline
 
   require Membrane.Logger
 

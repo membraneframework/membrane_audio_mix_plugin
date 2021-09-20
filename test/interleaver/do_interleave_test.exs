@@ -10,7 +10,7 @@ defmodule Membrane.DdInterleaveTest do
   require Membrane.Logger
 
   describe "DoInterleaver interleave should" do
-    defp to_pad(key, queue, end_of_stream \\ false) do
+    defp to_pad(key, queue) do
       {{Membrane.Pad, :input, key}, %{end_of_stream: false, queue: queue}}
     end
 

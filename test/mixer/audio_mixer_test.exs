@@ -1,4 +1,6 @@
 defmodule Membrane.AudioMixerTest do
+  @moduledoc false
+
   use ExUnit.Case
   use Membrane.Pipeline
 
@@ -27,24 +29,39 @@ defmodule Membrane.AudioMixerTest do
 
   describe "Audio Mixer should mix" do
     defp create_elements(input_paths, output_path, audio_format \\ :s16le) do
-      input_paths
-      |> Enum.with_index(1)
-      |> Enum.map(fn {path, index} ->
-        {String.to_atom("file_src_#{index}"), %Membrane.File.Source{location: path}}
-      end)
-      |> Enum.concat(
-        mixer: %Membrane.AudioMixer{
-          caps: %Raw{
-            channels: 1,
-            sample_rate: 16_000,
-            format: audio_format
-          }
-        },
-        file_sink: %Membrane.File.Sink{location: output_path}
-      )
+      base_elements =
+        input_paths
+        |> Enum.with_index(1)
+        |> Enum.map(fn {path, index} ->
+          {String.to_atom("file_src_#{index}"), %Membrane.File.Source{location: path}}
+        end)
+        |> Enum.concat(file_sink: %Membrane.File.Sink{location: output_path})
+
+      mixer = %Membrane.AudioMixer{
+        caps: %Raw{
+          channels: 1,
+          sample_rate: 16_000,
+          format: audio_format
+        }
+      }
+
+      declipper_mixer = %Membrane.AudioMixer{mixer | declipper: true}
+
+      {base_elements ++ [mixer: mixer], base_elements ++ [mixer: declipper_mixer]}
     end
 
-    defp perform_test(elements, links, reference_path, output_path) do
+    defp perform_test(
+           {clipper_elements, declipper_elements},
+           links,
+           clipper_reference,
+           declipper_reference,
+           output_path
+         ) do
+      do_perform_test(clipper_elements, links, clipper_reference, output_path)
+      do_perform_test(declipper_elements, links, declipper_reference, output_path)
+    end
+
+    defp do_perform_test(elements, links, reference_path, output_path) do
       pipeline_options = %Pipeline.Options{elements: elements, links: links}
       assert {:ok, pid} = Pipeline.start_link(pipeline_options)
 
@@ -54,12 +71,13 @@ defmodule Membrane.AudioMixerTest do
 
       assert {:ok, reference_file} = File.read(reference_path)
       assert {:ok, output_file} = File.read(output_path)
-      assert reference_file == output_file
+      assert output_file == reference_file
     end
 
     test "two tracks with the same size" do
       output_path = prepare_output()
       reference_path = expand_path("reference-same-size.raw")
+      declipped_reference_path = expand_path("reference-same-size-declipped.raw")
 
       elements = create_elements([@input_path_1, @input_path_1], output_path)
 
@@ -71,7 +89,7 @@ defmodule Membrane.AudioMixerTest do
         |> to(:mixer)
       ]
 
-      perform_test(elements, links, reference_path, output_path)
+      perform_test(elements, links, reference_path, declipped_reference_path, output_path)
     end
 
     test "two tracks with different sizes" do
@@ -88,7 +106,7 @@ defmodule Membrane.AudioMixerTest do
         |> to(:mixer)
       ]
 
-      perform_test(elements, links, reference_path, output_path)
+      perform_test(elements, links, reference_path, reference_path, output_path)
     end
 
     test "tracks when the shorter one has an offset" do
@@ -106,7 +124,7 @@ defmodule Membrane.AudioMixerTest do
         |> to(:mixer)
       ]
 
-      perform_test(elements, links, reference_path, output_path)
+      perform_test(elements, links, reference_path, reference_path, output_path)
     end
 
     test "tracks when the longer one has an offset" do
@@ -124,7 +142,7 @@ defmodule Membrane.AudioMixerTest do
         |> to(:mixer)
       ]
 
-      perform_test(elements, links, reference_path, output_path)
+      perform_test(elements, links, reference_path, reference_path, output_path)
     end
 
     test "tracks when both have offsets" do
@@ -143,7 +161,7 @@ defmodule Membrane.AudioMixerTest do
         |> to(:mixer)
       ]
 
-      perform_test(elements, links, reference_path, output_path)
+      perform_test(elements, links, reference_path, reference_path, output_path)
     end
 
     test "three tracks" do
@@ -164,26 +182,7 @@ defmodule Membrane.AudioMixerTest do
         |> to(:mixer)
       ]
 
-      perform_test(elements, links, reference_path, output_path)
-    end
-
-    test "tracks in unsinged format" do
-      output_path = prepare_output()
-      reference_path = expand_path("reference-unsigned.raw")
-
-      elements = create_elements([@input_path_1, @input_path_2], output_path, :u16le)
-
-      links = [
-        link(:file_src_1)
-        |> via_in(:input, options: [offset: Membrane.Time.microseconds(125)])
-        |> to(:mixer)
-        |> to(:file_sink),
-        link(:file_src_2)
-        |> via_in(:input, options: [offset: Membrane.Time.microseconds(125)])
-        |> to(:mixer)
-      ]
-
-      perform_test(elements, links, reference_path, output_path)
+      perform_test(elements, links, reference_path, reference_path, output_path)
     end
   end
 
