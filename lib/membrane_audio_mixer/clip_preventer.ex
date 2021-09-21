@@ -1,15 +1,21 @@
-defmodule Membrane.AudioMixer.Declipper do
+defmodule Membrane.AudioMixer.ClipPreventer do
   @moduledoc """
   Module responsible for mixing audio tracks (all in the same format, with the same number of
   channels and sample rate). Result is a single path in the format mixed paths are encoded in.
-  If overflow happens during mixing, overflowed wave will be scaled down to the max sample value.
+  If overflow happens during mixing, wave will be scaled down to the max sample value.
   """
 
   alias Membrane.AudioMixer.Helpers
   alias Membrane.Caps.Audio.Raw
 
   defmodule State do
-    @moduledoc false
+    @moduledoc """
+    Structure representing `ClipPreventer` state.
+
+    ## Keys
+      - `is_wave_positive` - are values in current wave positive?
+      - `queue` - queued mixed values from current wave
+    """
 
     defstruct is_wave_positive: true, queue: []
 

@@ -60,7 +60,18 @@ defmodule Membrane.AudioMix.Mixfile do
       main: "readme",
       extras: ["README.md", "LICENSE"],
       source_ref: "v#{@version}",
-      nest_modules_by_prefix: []
+      nest_modules_by_prefix: [
+        Membrane.AudioMixer,
+        Membrane.AudioInterleaver
+      ],
+      groups_for_modules: [
+        Mixer: [
+          ~r/^Membrane\.AudioMixer.*/
+        ],
+        Interleaver: [
+          ~r/^Membrane\.AudioInterleaver.*/
+        ]
+      ]
     ]
   end
 end

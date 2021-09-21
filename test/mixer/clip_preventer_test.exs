@@ -1,14 +1,14 @@
-defmodule Membrane.AudioMixer.DeclipperTest do
+defmodule Membrane.AudioMixer.ClipPreventerTest do
   @moduledoc false
 
   use ExUnit.Case, async: true
 
-  import Membrane.AudioMixer.Declipper
+  import Membrane.AudioMixer.ClipPreventer
 
   require Membrane.Logger
 
   alias Membrane.AudioMix.TestHelper
-  alias Membrane.AudioMixer.Declipper.State
+  alias Membrane.AudioMixer.ClipPreventer.State
 
   defp test_for_caps(caps_contents, buffers, reference) do
     caps_contents
@@ -21,7 +21,7 @@ defmodule Membrane.AudioMixer.DeclipperTest do
     end)
   end
 
-  describe "Declipper should just sum bytes from inputs in simple cases" do
+  describe "ClipPreventer should just sum bytes from inputs in simple cases" do
     defp test_for_several_caps(buffers, reference) do
       caps = [
         {1, 16_000, :s8},
@@ -73,7 +73,7 @@ defmodule Membrane.AudioMixer.DeclipperTest do
     end
   end
 
-  describe "Declipper should work for little endian values" do
+  describe "ClipPreventer should work for little endian values" do
     test "so mixes properly signed ones (4 bytes)" do
       caps = [
         {1, 16_000, :s16le},
@@ -101,7 +101,7 @@ defmodule Membrane.AudioMixer.DeclipperTest do
     end
   end
 
-  describe "Declipper should work for big endian values" do
+  describe "ClipPreventer should work for big endian values" do
     test "so mixes properly signed ones (4 bytes)" do
       caps = [
         {1, 16_000, :s16be},
@@ -129,7 +129,7 @@ defmodule Membrane.AudioMixer.DeclipperTest do
     end
   end
 
-  describe "Declipper should work for values without endianness" do
+  describe "ClipPreventer should work for values without endianness" do
     test "so mixes properly signed ones" do
       caps = [
         {1, 16_000, :s8},
@@ -145,7 +145,7 @@ defmodule Membrane.AudioMixer.DeclipperTest do
     end
   end
 
-  describe "Declipper should scale properly" do
+  describe "ClipPreventer should scale properly" do
     test "samples in :s8 format" do
       caps = [
         {1, 16_000, :s8},

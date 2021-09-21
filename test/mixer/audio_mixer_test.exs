@@ -43,23 +43,23 @@ defmodule Membrane.AudioMixerTest do
           sample_rate: 16_000,
           format: audio_format
         },
-        declipper: false
+        prevent_clipping: false
       }
 
-      declipper_mixer = %Membrane.AudioMixer{mixer | declipper: true}
+      preventer_mixer = %Membrane.AudioMixer{mixer | prevent_clipping: true}
 
-      {base_elements ++ [mixer: mixer], base_elements ++ [mixer: declipper_mixer]}
+      {base_elements ++ [mixer: mixer], base_elements ++ [mixer: preventer_mixer]}
     end
 
     defp perform_test(
-           {clipper_elements, declipper_elements},
+           {clipper_elements, preventer_elements},
            links,
            clipper_reference,
-           declipper_reference,
+           preventer_reference,
            output_path
          ) do
       do_perform_test(clipper_elements, links, clipper_reference, output_path)
-      do_perform_test(declipper_elements, links, declipper_reference, output_path)
+      do_perform_test(preventer_elements, links, preventer_reference, output_path)
     end
 
     defp do_perform_test(elements, links, reference_path, output_path) do
@@ -78,7 +78,7 @@ defmodule Membrane.AudioMixerTest do
     test "two tracks with the same size" do
       output_path = prepare_output()
       reference_path = expand_path("reference-same-size.raw")
-      declipped_reference_path = expand_path("reference-same-size-declipped.raw")
+      preventer_reference_path = expand_path("reference-same-size-preventer.raw")
 
       elements = create_elements([@input_path_1, @input_path_1], output_path)
 
@@ -90,7 +90,7 @@ defmodule Membrane.AudioMixerTest do
         |> to(:mixer)
       ]
 
-      perform_test(elements, links, reference_path, declipped_reference_path, output_path)
+      perform_test(elements, links, reference_path, preventer_reference_path, output_path)
     end
 
     test "two tracks with different sizes" do

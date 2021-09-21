@@ -17,7 +17,7 @@ defmodule Membrane.AudioMixer do
 
   require Membrane.Logger
 
-  alias Membrane.AudioMixer.Declipper
+  alias Membrane.AudioMixer.ClipPreventer
   alias Membrane.AudioMixer.DoMix
   alias Membrane.Buffer
   alias Membrane.Caps.Audio.Raw
@@ -45,12 +45,15 @@ defmodule Membrane.AudioMixer do
                 """,
                 default: 2048
               ],
-              declipper: [
+              prevent_clipping: [
                 type: :boolean,
                 spec: boolean(),
                 description: """
-                If false, overflowed waves will be clipped to the max value.
-                If true, overflowed waves will be scaled down to the max value.
+                Defines how the mixer should act in the case when an overflow happens.
+                - If true, the wave will be scaled down, so a peak will become the maximal
+                value of the sample in the format. See `Membrane.AudioMixer.ClipPreventer`.
+                - If false, overflow will be clipped to the maximal value of the sample in
+                the format. See `Membrane.AudioMixer.DoMix`.
                 """,
                 default: true
               ]
@@ -81,8 +84,8 @@ defmodule Membrane.AudioMixer do
       |> Map.put(:pads, %{})
 
     state =
-      if state.declipper do
-        Map.put(state, :declipper, %Declipper.State{})
+      if state.prevent_clipping do
+        Map.put(state, :prevent_clipping, %ClipPreventer.State{})
       else
         state
       end
@@ -263,7 +266,7 @@ defmodule Membrane.AudioMixer do
 
           {payload, state}
 
-        last_declipper_wave?(state) ->
+        last_preventer_wave?(state) ->
           mix_payloads([], state)
 
         true ->
@@ -287,7 +290,7 @@ defmodule Membrane.AudioMixer do
     number - rest
   end
 
-  defp mix(pads, mix_size, %{declipper: false} = state) when map_size(pads) == 1 do
+  defp mix(pads, mix_size, %{prevent_clipping: false} = state) when map_size(pads) == 1 do
     [{pad, data}] = Map.to_list(pads)
 
     <<payload::binary-size(mix_size)>> <> queue = data.queue
@@ -316,8 +319,8 @@ defmodule Membrane.AudioMixer do
     |> Enum.all?()
   end
 
-  defp last_declipper_wave?(%{declipper: declipper} = state) do
-    declipper != false && all_streams_ended?(state)
+  defp last_preventer_wave?(%{prevent_clipping: prevent_clipping} = state) do
+    prevent_clipping != false && all_streams_ended?(state)
   end
 
   defp remove_finished_pads(pads, time_frame) do
@@ -329,10 +332,11 @@ defmodule Membrane.AudioMixer do
     |> Map.new()
   end
 
-  defp mix_payloads(payloads, %{declipper: %Declipper.State{} = declipper, caps: caps} = state) do
+  defp mix_payloads(payloads, %{prevent_clipping: %ClipPreventer.State{} = preventer} = state) do
     all_ended = all_streams_ended?(state)
-    {payload, declipper} = Declipper.mix(payloads, all_ended, caps, declipper)
-    state = Map.put(state, :declipper, declipper)
+
+    {payload, preventer} = ClipPreventer.mix(payloads, all_ended, state.caps, preventer)
+    state = %{state | prevent_clipping: preventer}
 
     {payload, state}
   end
