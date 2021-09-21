@@ -42,7 +42,8 @@ defmodule Membrane.AudioMixerTest do
           channels: 1,
           sample_rate: 16_000,
           format: audio_format
-        }
+        },
+        declipper: false
       }
 
       declipper_mixer = %Membrane.AudioMixer{mixer | declipper: true}

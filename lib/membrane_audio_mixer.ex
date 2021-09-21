@@ -52,7 +52,7 @@ defmodule Membrane.AudioMixer do
                 If false, overflowed waves will be clipped to the max value.
                 If true, overflowed waves will be scaled down to the max value.
                 """,
-                default: false
+                default: true
               ]
 
   def_output_pad :output,
@@ -81,8 +81,8 @@ defmodule Membrane.AudioMixer do
       |> Map.put(:pads, %{})
 
     state =
-      if state.declipper && state.caps != nil do
-        Map.put(state, :declipper, %Declipper.State{caps: state.caps})
+      if state.declipper do
+        Map.put(state, :declipper, %Declipper.State{})
       else
         state
       end
@@ -211,7 +211,8 @@ defmodule Membrane.AudioMixer do
       {{_pad, %Buffer{payload: payload}} = buffer, state} =
         mix_and_get_buffer(%{state | pads: pads})
 
-      actions = [buffer: buffer] ++ if payload == <<>>, do: [redemand: :output], else: []
+      redemand = if payload == <<>>, do: [redemand: :output], else: []
+      actions = [{:buffer, buffer} | redemand]
       {{:ok, actions}, state}
     else
       {{:ok, redemand: :output}, %{state | pads: pads}}
@@ -220,12 +221,7 @@ defmodule Membrane.AudioMixer do
 
   @impl true
   def handle_caps(_pad, caps, _context, %{caps: nil} = state) do
-    declipper = if state.declipper, do: %Declipper.State{caps: caps}, else: false
-
-    state =
-      state
-      |> Map.put(:caps, caps)
-      |> Map.put(:declipper, declipper)
+    state = %{state | caps: caps}
 
     {{:ok, caps: {:output, caps}, redemand: :output}, state}
   end
@@ -258,15 +254,20 @@ defmodule Membrane.AudioMixer do
     mix_size = get_mix_size(pads, time_frame)
 
     {payload, state} =
-      if mix_size >= time_frame || last_declipper_wave?(state) do
-        {payload, pads, state} = mix(pads, mix_size, state)
-        pads = remove_finished_pads(pads, time_frame)
+      cond do
+        mix_size >= time_frame ->
+          {payload, pads, state} = mix(pads, mix_size, state)
+          pads = remove_finished_pads(pads, time_frame)
 
-        state = %{state | pads: pads}
+          state = %{state | pads: pads}
 
-        {payload, state}
-      else
-        {<<>>, state}
+          {payload, state}
+
+        last_declipper_wave?(state) ->
+          mix_payloads([], state)
+
+        true ->
+          {<<>>, state}
       end
 
     buffer = {:output, %Buffer{payload: payload}}
@@ -328,9 +329,9 @@ defmodule Membrane.AudioMixer do
     |> Map.new()
   end
 
-  defp mix_payloads(payloads, %{declipper: %Declipper.State{} = declipper} = state) do
+  defp mix_payloads(payloads, %{declipper: %Declipper.State{} = declipper, caps: caps} = state) do
     all_ended = all_streams_ended?(state)
-    {payload, declipper} = Declipper.mix(payloads, all_ended, declipper)
+    {payload, declipper} = Declipper.mix(payloads, all_ended, caps, declipper)
     state = Map.put(state, :declipper, declipper)
 
     {payload, state}

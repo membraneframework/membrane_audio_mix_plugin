@@ -11,11 +11,9 @@ defmodule Membrane.AudioMixer.Declipper do
   defmodule State do
     @moduledoc false
 
-    @enforce_keys [:caps]
-    defstruct @enforce_keys ++ [is_wave_positive: true, queue: []]
+    defstruct is_wave_positive: true, queue: []
 
     @type t :: %__MODULE__{
-            caps: Raw.t(),
             is_wave_positive: boolean(),
             queue: [integer()]
           }
@@ -25,22 +23,22 @@ defmodule Membrane.AudioMixer.Declipper do
   Mixes `buffers` to one buffer. Given buffers should have equal sizes. It uses information about
   samples provided in `caps`.
   """
-  @spec mix([binary()], boolean(), State.t()) :: {binary(), State.t()}
-  def mix(buffers, last_wave, %State{caps: caps} = state) do
+  @spec mix([binary()], boolean(), Raw.t(), State.t()) :: {binary(), State.t()}
+  def mix(buffers, last_wave, caps, state) do
     sample_size = Raw.sample_size(caps)
 
     buffers
-    |> Helpers.zip_longest_binary_by(sample_size, fn buf -> do_mix(buf, state) end)
-    |> add_values(last_wave, state)
+    |> Helpers.zip_longest_binary_by(sample_size, fn buf -> do_mix(buf, caps) end)
+    |> add_values(last_wave, caps, state)
   end
 
-  defp do_mix(samples, %State{caps: caps}) do
+  defp do_mix(samples, caps) do
     samples
     |> Enum.map(&Raw.sample_to_value(&1, caps))
     |> Enum.sum()
   end
 
-  defp add_values(values, last_wave, state, buffer \\ <<>>) do
+  defp add_values(values, last_wave, caps, state, buffer \\ <<>>) do
     split_fun = if state.is_wave_positive, do: &(&1 >= 0), else: &(&1 <= 0)
     {values, rest} = Enum.split_while(values, split_fun)
 
@@ -48,7 +46,7 @@ defmodule Membrane.AudioMixer.Declipper do
       state = %State{state | queue: state.queue ++ values}
       {buffer, state}
     else
-      buffer = buffer <> get_buffer(values, state)
+      buffer = buffer <> get_buffer(values, caps, state)
 
       state =
         state
@@ -58,14 +56,14 @@ defmodule Membrane.AudioMixer.Declipper do
       if last_wave && rest == [] do
         {buffer, state}
       else
-        add_values(rest, last_wave, state, buffer)
+        add_values(rest, last_wave, caps, state, buffer)
       end
     end
   end
 
-  defp get_buffer([], %State{queue: []}), do: <<>>
+  defp get_buffer([], _caps, %State{queue: []}), do: <<>>
 
-  defp get_buffer(values, %State{caps: caps, queue: queue}) do
+  defp get_buffer(values, caps, %State{queue: queue}) do
     (queue ++ values)
     |> scale(caps)
     |> Enum.map(&Raw.value_to_sample(&1, caps))

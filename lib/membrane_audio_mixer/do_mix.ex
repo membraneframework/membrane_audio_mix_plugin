@@ -16,12 +16,9 @@ defmodule Membrane.AudioMixer.DoMix do
   def mix(buffers, caps) do
     sample_size = Raw.sample_size(caps)
 
-    buffer =
-      buffers
-      |> Helpers.zip_longest_binary_by(sample_size, fn buf -> do_mix(buf, mix_params(caps)) end)
-      |> IO.iodata_to_binary()
-
-    buffer
+    buffers
+    |> Helpers.zip_longest_binary_by(sample_size, fn buf -> do_mix(buf, mix_params(caps)) end)
+    |> IO.iodata_to_binary()
   end
 
   defp mix_params(caps) do

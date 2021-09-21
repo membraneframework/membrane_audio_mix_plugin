@@ -15,7 +15,7 @@ defmodule Membrane.AudioMixer.DeclipperTest do
     |> TestHelper.generate_caps()
     |> Enum.each(fn caps ->
       Membrane.Logger.debug("caps: #{inspect(caps)}")
-      {result, %State{caps: ^caps, queue: queue}} = mix(buffers, true, %State{caps: caps})
+      {result, %State{queue: queue}} = mix(buffers, true, caps, %State{})
       assert [] == queue
       assert reference == result
     end)
