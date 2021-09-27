@@ -13,7 +13,7 @@ It is a part of [Membrane Multimedia Framework](https://membraneframework.org).
 Add the following line to your `deps` in `mix.exs`. Run `mix deps.get`.
 
 ```elixir
-{:membrane_audio_mix_plugin, "~> 0.2.0"}
+{:membrane_audio_mix_plugin, "~> 0.3.0"}
 ```
 
 ## Description
@@ -34,8 +34,8 @@ Mixing and interleaving is tested only for integer audio formats.
 
 ### Mixer
 
-The Mixer adds samples from all pads and clips the result to the maximum value for given
-format to avoid overflow.
+The Mixer adds samples from all pads. It has two strategies to deal with the overflow:
+scaling down waves and clipping.
 
 ### Interleaver
 
