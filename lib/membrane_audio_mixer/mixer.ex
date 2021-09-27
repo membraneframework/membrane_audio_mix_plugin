@@ -5,6 +5,9 @@ defmodule Membrane.AudioMixer.Mixer do
 
   @type state_t :: any()
 
+  @doc """
+  Initializes the mixer's state.
+  """
   @callback init() :: state_t()
 
   @doc """
@@ -14,6 +17,9 @@ defmodule Membrane.AudioMixer.Mixer do
   @callback mix(buffers :: [binary()], caps :: Raw.t(), state :: state_t()) ::
               {buffers :: binary(), state :: state_t()}
 
+  @doc """
+  Forces mixer to flush the remaining buffers. It uses information about samples provided in `caps`.
+  """
   @callback flush(caps :: Raw.t(), state :: state_t()) ::
               {buffers :: binary(), state :: state_t()}
 end

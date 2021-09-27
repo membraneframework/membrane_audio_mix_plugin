@@ -1,8 +1,18 @@
 defmodule Membrane.AudioMixer.ClipPreventingAdder do
   @moduledoc """
   Module responsible for mixing audio tracks (all in the same format, with the same number of
-  channels and sample rate). Result is a single path in the format mixed paths are encoded in.
-  If overflow happens during mixing, wave will be scaled down to the max sample value.
+  channels and sample rate). The result is a single path in the format mixed paths are encoded in.
+  If overflow happens during mixing, a wave will be scaled down to the max sample value.
+
+  Description of the algorithm:
+    - Start with an empty queue
+    - Put merged values while the sign of the values remains the same
+    - If you have a whole wave (from sign change to sign change) or adder is flushed:
+      - If none of the values overflows limits of the format, convert the whole wave
+        to binary samples and return them
+      - Otherwise, scale down the whole wave, so the peak of the wave will become
+        maximal (minimal) allowed value, convert wave to binary samples and return
+        them.
   """
 
   @behaviour Membrane.AudioMixer.Mixer
@@ -20,10 +30,6 @@ defmodule Membrane.AudioMixer.ClipPreventingAdder do
   @impl true
   def init(), do: %__MODULE__{}
 
-  @doc """
-  Mixes `buffers` to one buffer. Given buffers should have equal sizes. It uses information about
-  samples provided in `caps`.
-  """
   @impl true
   def mix(buffers, caps, state) do
     sample_size = Raw.sample_size(caps)
