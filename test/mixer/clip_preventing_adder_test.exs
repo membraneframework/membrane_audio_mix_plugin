@@ -1,45 +1,31 @@
-defmodule Membrane.AudioMixer.ClipPreventerTest do
+defmodule Membrane.AudioMixer.ClipPreventingAdderTest do
   @moduledoc false
 
   use ExUnit.Case, async: true
 
-  import Membrane.AudioMixer.ClipPreventer
+  import Membrane.AudioMixer.ClipPreventingAdder
 
   require Membrane.Logger
 
   alias Membrane.AudioMix.TestHelper
-  alias Membrane.AudioMixer.ClipPreventer.State
+  alias Membrane.AudioMixer.ClipPreventingAdder
+  alias Membrane.Caps.Audio.Raw
 
   defp test_for_caps(caps_contents, buffers, reference) do
     caps_contents
     |> TestHelper.generate_caps()
     |> Enum.each(fn caps ->
       Membrane.Logger.debug("caps: #{inspect(caps)}")
-      {result, %State{queue: queue}} = mix(buffers, true, caps, %State{})
+      {result, state} = mix(buffers, caps, %ClipPreventingAdder{})
+      {flushed, %ClipPreventingAdder{queue: queue}} = flush(caps, state)
       assert [] == queue
-      assert reference == result
+      assert reference == result <> flushed
     end)
   end
 
-  describe "ClipPreventer should just sum bytes from inputs in simple cases" do
+  describe "ClipPreventingAdder should just sum bytes from inputs in simple cases" do
     defp test_for_several_caps(buffers, reference) do
-      caps = [
-        {1, 16_000, :s8},
-        {1, 16_000, :s16le},
-        {1, 16_000, :s24le},
-        {1, 16_000, :s32le},
-        {1, 16_000, :s16be},
-        {1, 16_000, :s24be},
-        {1, 16_000, :s32be},
-        {1, 44_100, :s16le},
-        {1, 44_100, :s16be},
-        {2, 16_000, :s16le},
-        {2, 16_000, :s16be},
-        {6, 16_000, :s16le},
-        {6, 16_000, :s16be}
-      ]
-
-      test_for_caps(caps, buffers, reference)
+      test_for_caps(TestHelper.supported_caps(), buffers, reference)
     end
 
     test "when 2 inputs have 0 bytes" do
@@ -73,7 +59,7 @@ defmodule Membrane.AudioMixer.ClipPreventerTest do
     end
   end
 
-  describe "ClipPreventer should work for little endian values" do
+  describe "ClipPreventingAdder should work for little endian values" do
     test "so mixes properly signed ones (4 bytes)" do
       caps = [
         {1, 16_000, :s16le},
@@ -101,7 +87,7 @@ defmodule Membrane.AudioMixer.ClipPreventerTest do
     end
   end
 
-  describe "ClipPreventer should work for big endian values" do
+  describe "ClipPreventingAdder should work for big endian values" do
     test "so mixes properly signed ones (4 bytes)" do
       caps = [
         {1, 16_000, :s16be},
@@ -129,7 +115,7 @@ defmodule Membrane.AudioMixer.ClipPreventerTest do
     end
   end
 
-  describe "ClipPreventer should work for values without endianness" do
+  describe "ClipPreventingAdder should work for values without endianness" do
     test "so mixes properly signed ones" do
       caps = [
         {1, 16_000, :s8},
@@ -145,7 +131,7 @@ defmodule Membrane.AudioMixer.ClipPreventerTest do
     end
   end
 
-  describe "ClipPreventer should scale properly" do
+  describe "ClipPreventingAdder should scale properly" do
     test "samples in :s8 format" do
       caps = [
         {1, 16_000, :s8},
@@ -264,6 +250,31 @@ defmodule Membrane.AudioMixer.ClipPreventerTest do
       reference = <<127, 255, 255, 255, 0, 2, 10, 100>>
 
       test_for_caps(caps, buffers, reference)
+    end
+  end
+
+  describe "ClipPreventingAdder should" do
+    defp test_flush_for_several_caps(queue, flushed) do
+      TestHelper.supported_caps()
+      |> TestHelper.generate_caps()
+      |> Enum.each(fn caps ->
+        payload = flushed |> Enum.map(&Raw.value_to_sample(&1, caps)) |> IO.iodata_to_binary()
+
+        assert {^payload, %ClipPreventingAdder{queue: []}} =
+                 flush(caps, %ClipPreventingAdder{queue: queue})
+      end)
+    end
+
+    test "initialize properly " do
+      assert init() == %ClipPreventingAdder{}
+    end
+
+    test "flush empty queue properly" do
+      test_flush_for_several_caps([], [])
+    end
+
+    test "flush with small values properly" do
+      test_flush_for_several_caps([100, 80, 50, 20], [100, 80, 50, 20])
     end
   end
 end

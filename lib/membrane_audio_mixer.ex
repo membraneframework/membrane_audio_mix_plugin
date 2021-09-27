@@ -17,8 +17,7 @@ defmodule Membrane.AudioMixer do
 
   require Membrane.Logger
 
-  alias Membrane.AudioMixer.ClipPreventer
-  alias Membrane.AudioMixer.DoMix
+  alias Membrane.AudioMixer.{Adder, ClipPreventingAdder}
   alias Membrane.Buffer
   alias Membrane.Caps.Audio.Raw
   alias Membrane.Caps.Matcher
@@ -51,9 +50,9 @@ defmodule Membrane.AudioMixer do
                 description: """
                 Defines how the mixer should act in the case when an overflow happens.
                 - If true, the wave will be scaled down, so a peak will become the maximal
-                value of the sample in the format. See `Membrane.AudioMixer.ClipPreventer`.
+                value of the sample in the format. See `Membrane.AudioMixer.ClipPreventingAdder`.
                 - If false, overflow will be clipped to the maximal value of the sample in
-                the format. See `Membrane.AudioMixer.DoMix`.
+                the format. See `Membrane.AudioMixer.Adder`.
                 """,
                 default: true
               ]
@@ -78,17 +77,16 @@ defmodule Membrane.AudioMixer do
 
   @impl true
   def handle_init(%__MODULE__{} = options) do
+    mixer_module = if options.prevent_clipping, do: ClipPreventingAdder, else: Adder
+    mixer_state = mixer_module.init()
+
     state =
       options
       |> Map.from_struct()
       |> Map.put(:pads, %{})
-
-    state =
-      if state.prevent_clipping do
-        Map.put(state, :prevent_clipping, %ClipPreventer.State{})
-      else
-        state
-      end
+      |> Map.delete(:prevent_clipping)
+      |> Map.put(:mixer_module, mixer_module)
+      |> Map.put(:mixer_state, mixer_state)
 
     {:ok, state}
   end
@@ -257,20 +255,22 @@ defmodule Membrane.AudioMixer do
     mix_size = get_mix_size(pads, time_frame)
 
     {payload, state} =
-      cond do
-        mix_size >= time_frame ->
-          {payload, pads, state} = mix(pads, mix_size, state)
-          pads = remove_finished_pads(pads, time_frame)
+      if mix_size >= time_frame do
+        {payload, pads, state} = mix(pads, mix_size, state)
+        pads = remove_finished_pads(pads, time_frame)
+        state = %{state | pads: pads}
 
-          state = %{state | pads: pads}
+        {payload, state}
+      else
+        {<<>>, state}
+      end
 
-          {payload, state}
-
-        last_preventer_wave?(state) ->
-          mix_payloads([], state)
-
-        true ->
-          {<<>>, state}
+    {payload, state} =
+      if all_streams_ended?(state) do
+        {flushed, state} = flush_mixer(state)
+        {payload <> flushed, state}
+      else
+        {payload, state}
       end
 
     buffer = {:output, %Buffer{payload: payload}}
@@ -288,14 +288,6 @@ defmodule Membrane.AudioMixer do
   defp int_part(number, divisor) when is_integer(number) and is_integer(divisor) do
     rest = rem(number, divisor)
     number - rest
-  end
-
-  defp mix(pads, mix_size, %{prevent_clipping: false} = state) when map_size(pads) == 1 do
-    [{pad, data}] = Map.to_list(pads)
-
-    <<payload::binary-size(mix_size)>> <> queue = data.queue
-
-    {payload, %{pad => %{data | queue: queue}}, state}
   end
 
   defp mix(pads, mix_size, state) do
@@ -319,10 +311,6 @@ defmodule Membrane.AudioMixer do
     |> Enum.all?()
   end
 
-  defp last_preventer_wave?(%{prevent_clipping: prevent_clipping} = state) do
-    prevent_clipping != false && all_streams_ended?(state)
-  end
-
   defp remove_finished_pads(pads, time_frame) do
     pads
     |> Enum.flat_map(fn
@@ -332,17 +320,15 @@ defmodule Membrane.AudioMixer do
     |> Map.new()
   end
 
-  defp mix_payloads(payloads, %{prevent_clipping: %ClipPreventer.State{} = preventer} = state) do
-    all_ended = all_streams_ended?(state)
-
-    {payload, preventer} = ClipPreventer.mix(payloads, all_ended, state.caps, preventer)
-    state = %{state | prevent_clipping: preventer}
-
+  defp mix_payloads(payloads, %{mixer_module: module} = state) do
+    {payload, mixer_state} = module.mix(payloads, state.caps, state.mixer_state)
+    state = %{state | mixer_state: mixer_state}
     {payload, state}
   end
 
-  defp mix_payloads(payloads, state) do
-    payload = DoMix.mix(payloads, state.caps)
+  defp flush_mixer(%{mixer_module: module} = state) do
+    {payload, mixer_state} = module.flush(state.caps, state.mixer_state)
+    state = %{state | mixer_state: mixer_state}
     {payload, state}
   end
 end

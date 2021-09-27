@@ -1,6 +1,6 @@
-defmodule Membrane.AudioMixer.DoMixTest do
+defmodule Membrane.AudioMixer.AdderTest do
   @moduledoc """
-  Tests for DoMix module. It contatins only one public function - `mix(buffers, caps)`, so tests
+  Tests for Adder module. It contatins only one public function - `mix(buffers, caps)`, so tests
   check output of the mixing for serveral formats.
 
   Debugging: before every test, Membrane.Logger prints message with used caps. They can be seen
@@ -10,7 +10,7 @@ defmodule Membrane.AudioMixer.DoMixTest do
 
   use ExUnit.Case, async: true
 
-  import Membrane.AudioMixer.DoMix
+  import Membrane.AudioMixer.Adder
 
   require Membrane.Logger
 
@@ -21,29 +21,13 @@ defmodule Membrane.AudioMixer.DoMixTest do
     |> TestHelper.generate_caps()
     |> Enum.each(fn caps ->
       Membrane.Logger.debug("caps: #{inspect(caps)}")
-      assert reference == mix(buffers, caps)
+      assert {reference, nil} == mix(buffers, caps, nil)
     end)
   end
 
-  describe "DoMix should just sum bytes from inputs in simple cases" do
+  describe "Adder should just sum bytes from inputs in simple cases" do
     defp test_for_several_caps(buffers, reference) do
-      caps = [
-        {1, 16_000, :s8},
-        {1, 16_000, :s16le},
-        {1, 16_000, :s24le},
-        {1, 16_000, :s32le},
-        {1, 16_000, :s16be},
-        {1, 16_000, :s24be},
-        {1, 16_000, :s32be},
-        {1, 44_100, :s16le},
-        {1, 44_100, :s16be},
-        {2, 16_000, :s16le},
-        {2, 16_000, :s16be},
-        {6, 16_000, :s16le},
-        {6, 16_000, :s16be}
-      ]
-
-      test_for_caps(caps, buffers, reference)
+      test_for_caps(TestHelper.supported_caps(), buffers, reference)
     end
 
     test "when 2 inputs have 0 bytes" do
@@ -77,7 +61,7 @@ defmodule Membrane.AudioMixer.DoMixTest do
     end
   end
 
-  describe "DoMix should work for little endian values" do
+  describe "Adder should work for little endian values" do
     test "so mixes properly signed ones (4 bytes)" do
       caps = [
         {1, 16_000, :s16le},
@@ -105,7 +89,7 @@ defmodule Membrane.AudioMixer.DoMixTest do
     end
   end
 
-  describe "DoMix should work for big endian values" do
+  describe "Adder should work for big endian values" do
     test "so mixes properly signed ones (4 bytes)" do
       caps = [
         {1, 16_000, :s16be},
@@ -133,7 +117,7 @@ defmodule Membrane.AudioMixer.DoMixTest do
     end
   end
 
-  describe "DoMix should work for values without endianness" do
+  describe "Adder should work for values without endianness" do
     test "so mixes properly signed ones" do
       caps = [
         {1, 16_000, :s8},
@@ -149,7 +133,7 @@ defmodule Membrane.AudioMixer.DoMixTest do
     end
   end
 
-  describe "DoMix should clip properly" do
+  describe "Adder should clip properly" do
     test "samples in :s8 format" do
       caps = [
         {1, 16_000, :s8},
@@ -248,6 +232,20 @@ defmodule Membrane.AudioMixer.DoMixTest do
       reference = <<127, 255, 255, 255, 128, 0, 0, 0>>
 
       test_for_caps(caps, buffers, reference)
+    end
+  end
+
+  describe "Adder should" do
+    test "initialize properly " do
+      assert init() == nil
+    end
+
+    test "flush properly" do
+      TestHelper.supported_caps()
+      |> TestHelper.generate_caps()
+      |> Enum.each(fn caps ->
+        assert flush(caps, nil) == {<<>>, nil}
+      end)
     end
   end
 end

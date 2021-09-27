@@ -1,25 +1,32 @@
-defmodule Membrane.AudioMixer.DoMix do
+defmodule Membrane.AudioMixer.Adder do
   @moduledoc """
   Module responsible for mixing audio tracks (all in the same format, with the same number of
   channels and sample rate). Result is a single path in the format mixed paths are encoded in.
   If overflow happens during mixing, it is being clipped to the max value of sample in this format.
   """
 
+  @behaviour Membrane.AudioMixer.Mixer
+
   alias Membrane.AudioMixer.Helpers
   alias Membrane.Caps.Audio.Raw
 
-  @doc """
-  Mixes `buffers` to one buffer. Given buffers should have equal sizes. It uses information about
-  samples provided in `caps`.
-  """
-  @spec mix([binary()], Membrane.Caps.Audio.Raw.t()) :: binary()
-  def mix(buffers, caps) do
+  @impl true
+  def init(), do: nil
+
+  @impl true
+  def mix(buffers, caps, state) do
     sample_size = Raw.sample_size(caps)
 
-    buffers
-    |> Helpers.zip_longest_binary_by(sample_size, fn buf -> do_mix(buf, mix_params(caps)) end)
-    |> IO.iodata_to_binary()
+    buffers =
+      buffers
+      |> Helpers.zip_longest_binary_by(sample_size, fn buf -> do_mix(buf, mix_params(caps)) end)
+      |> IO.iodata_to_binary()
+
+    {buffers, state}
   end
+
+  @impl true
+  def flush(_caps, state), do: {<<>>, state}
 
   defp mix_params(caps) do
     %{caps: caps, clipper: clipper_factory(caps)}
