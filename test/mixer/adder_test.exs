@@ -1,6 +1,6 @@
-defmodule Membrane.AudioMixer.DoMixTest do
+defmodule Membrane.AudioMixer.AdderTest do
   @moduledoc """
-  Tests for DoMix module. It contatins only one public function - `mix(buffers, caps)`, so tests
+  Tests for Adder module. It contatins only one public function - `mix(buffers, caps)`, so tests
   check output of the mixing for serveral formats.
 
   Debugging: before every test, Membrane.Logger prints message with used caps. They can be seen
@@ -10,64 +10,25 @@ defmodule Membrane.AudioMixer.DoMixTest do
 
   use ExUnit.Case, async: true
 
-  import Membrane.AudioMixer.DoMix
-
-  alias Membrane.Caps.Audio.Raw
+  import Membrane.AudioMixer.Adder
 
   require Membrane.Logger
 
+  alias Membrane.AudioMix.TestHelper
+
   defp test_for_caps(caps_contents, buffers, reference) do
     caps_contents
-    |> generate_caps()
+    |> TestHelper.generate_caps()
     |> Enum.each(fn caps ->
+      state = init(caps)
       Membrane.Logger.debug("caps: #{inspect(caps)}")
-      assert reference == mix(buffers, caps)
+      assert {reference, state} == mix(buffers, state)
     end)
   end
 
-  defp generate_caps(caps_contents) do
-    Enum.map(
-      caps_contents,
-      fn {channels, sample_rate, format} = _caps ->
-        %Raw{
-          channels: channels,
-          sample_rate: sample_rate,
-          format: format
-        }
-      end
-    )
-  end
-
-  describe "DoMix should just sum bytes from inputs in simple cases" do
+  describe "Adder should just sum bytes from inputs in simple cases" do
     defp test_for_several_caps(buffers, reference) do
-      caps = [
-        {1, 16_000, :s8},
-        {1, 16_000, :u8},
-        {1, 16_000, :s16le},
-        {1, 16_000, :s24le},
-        {1, 16_000, :s32le},
-        {1, 16_000, :u16le},
-        {1, 16_000, :u24le},
-        {1, 16_000, :u32le},
-        {1, 16_000, :s16be},
-        {1, 16_000, :s24be},
-        {1, 16_000, :s32be},
-        {1, 16_000, :u16be},
-        {1, 16_000, :u24be},
-        {1, 16_000, :u32be},
-        {1, 44_100, :s16le},
-        {1, 44_100, :s16be},
-        {2, 16_000, :s16le},
-        {2, 16_000, :u16le},
-        {2, 16_000, :s16be},
-        {2, 16_000, :u16be},
-        {6, 16_000, :s16le},
-        {6, 16_000, :u16le},
-        {6, 16_000, :s16be},
-        {6, 16_000, :u16be}
-      ]
-
-      test_for_caps(caps, buffers, reference)
+      test_for_caps(TestHelper.supported_caps(), buffers, reference)
     end
 
     test "when 2 inputs have 0 bytes" do
@@ -101,7 +62,7 @@ defmodule Membrane.AudioMixer.DoMixTest do
     end
   end
 
-  describe "DoMix should work for little endian values" do
+  describe "Adder should work for little endian values" do
     test "so mixes properly signed ones (4 bytes)" do
       caps = [
         {1, 16_000, :s16le},
@@ -127,35 +88,9 @@ defmodule Membrane.AudioMixer.DoMixTest do
 
       test_for_caps(caps, buffers, reference)
     end
-
-    test "so mixes properly unsigned ones (4 bytes)" do
-      caps = [
-        {1, 16_000, :u16le},
-        {1, 16_000, :u32le},
-        {1, 44_100, :u16le},
-        {2, 16_000, :u16le}
-      ]
-
-      buffers = [<<6, 80, 150, 180>>, <<250, 30, 240, 50>>]
-      reference = <<0, 111, 134, 231>>
-
-      test_for_caps(caps, buffers, reference)
-    end
-
-    test "so mixes properly unsigned ones (3 bytes)" do
-      caps = [
-        {1, 16_000, :u24le},
-        {1, 44_100, :u24le}
-      ]
-
-      buffers = [<<250, 255, 120>>, <<30, 0, 115>>]
-      reference = <<24, 0, 236>>
-
-      test_for_caps(caps, buffers, reference)
-    end
   end
 
-  describe "DoMix should work for big endian values" do
+  describe "Adder should work for big endian values" do
     test "so mixes properly signed ones (4 bytes)" do
       caps = [
         {1, 16_000, :s16be},
@@ -181,35 +116,9 @@ defmodule Membrane.AudioMixer.DoMixTest do
 
       test_for_caps(caps, buffers, reference)
     end
-
-    test "so mixes properly unsigned ones (4 bytes)" do
-      caps = [
-        {1, 16_000, :u16be},
-        {1, 16_000, :u32be},
-        {1, 44_100, :u16be},
-        {2, 16_000, :u16be}
-      ]
-
-      buffers = [<<180, 150, 80, 6>>, <<50, 240, 30, 250>>]
-      reference = <<231, 134, 111, 0>>
-
-      test_for_caps(caps, buffers, reference)
-    end
-
-    test "so mixes properly unsigned ones (3 bytes)" do
-      caps = [
-        {1, 16_000, :u24be},
-        {1, 44_100, :u24be}
-      ]
-
-      buffers = [<<120, 255, 250>>, <<115, 0, 30>>]
-      reference = <<236, 0, 24>>
-
-      test_for_caps(caps, buffers, reference)
-    end
   end
 
-  describe "DoMix should work for values without endianness" do
+  describe "Adder should work for values without endianness" do
     test "so mixes properly signed ones" do
       caps = [
         {1, 16_000, :s8},
@@ -225,7 +134,7 @@ defmodule Membrane.AudioMixer.DoMixTest do
     end
   end
 
-  describe "DoMix should clip properly" do
+  describe "Adder should clip properly" do
     test "samples in :s8 format" do
       caps = [
         {1, 16_000, :s8},
@@ -236,20 +145,6 @@ defmodule Membrane.AudioMixer.DoMixTest do
 
       buffers = [<<80, 64, 128, 190>>, <<80, 64, 128, 190>>]
       reference = <<127, 127, 128, 128>>
-
-      test_for_caps(caps, buffers, reference)
-    end
-
-    test "samples in :u8 format" do
-      caps = [
-        {1, 16_000, :u8},
-        {1, 44_100, :u8},
-        {2, 16_000, :u8},
-        {4, 16_000, :u8}
-      ]
-
-      buffers = [<<255, 255, 128, 190>>, <<255, 1, 128, 190>>]
-      reference = <<255, 255, 255, 255>>
 
       test_for_caps(caps, buffers, reference)
     end
@@ -267,19 +162,6 @@ defmodule Membrane.AudioMixer.DoMixTest do
       test_for_caps(caps, buffers, reference)
     end
 
-    test "samples in :u16le format" do
-      caps = [
-        {1, 16_000, :u16le},
-        {1, 44_100, :u16le},
-        {2, 16_000, :u16le}
-      ]
-
-      buffers = [<<255, 200, 0, 128>>, <<255, 150, 0, 128>>]
-      reference = <<255, 255, 255, 255>>
-
-      test_for_caps(caps, buffers, reference)
-    end
-
     test "samples in :s16be format" do
       caps = [
         {1, 16_000, :s16be},
@@ -289,19 +171,6 @@ defmodule Membrane.AudioMixer.DoMixTest do
 
       buffers = [<<80, 255, 180, 255>>, <<80, 255, 180, 255>>]
       reference = <<127, 255, 128, 0>>
-
-      test_for_caps(caps, buffers, reference)
-    end
-
-    test "samples in :u16be format" do
-      caps = [
-        {1, 16_000, :u16be},
-        {1, 44_100, :u16be},
-        {2, 16_000, :u16be}
-      ]
-
-      buffers = [<<200, 255, 128, 0>>, <<150, 255, 128, 0>>]
-      reference = <<255, 255, 255, 255>>
 
       test_for_caps(caps, buffers, reference)
     end
@@ -319,19 +188,6 @@ defmodule Membrane.AudioMixer.DoMixTest do
       test_for_caps(caps, buffers, reference)
     end
 
-    test "samples in :u24le format" do
-      caps = [
-        {1, 16_000, :u24le},
-        {1, 44_100, :u24le},
-        {2, 16_000, :u24le}
-      ]
-
-      buffers = [<<1, 0, 0, 255, 255, 255>>, <<255, 255, 255, 255, 255, 255>>]
-      reference = <<255, 255, 255, 255, 255, 255>>
-
-      test_for_caps(caps, buffers, reference)
-    end
-
     test "samples in :s24be format" do
       caps = [
         {1, 16_000, :s24be},
@@ -341,19 +197,6 @@ defmodule Membrane.AudioMixer.DoMixTest do
 
       buffers = [<<127, 255, 255, 150, 255, 255>>, <<127, 255, 255, 150, 255, 255>>]
       reference = <<127, 255, 255, 128, 0, 0>>
-
-      test_for_caps(caps, buffers, reference)
-    end
-
-    test "samples in :u24be format" do
-      caps = [
-        {1, 16_000, :u24be},
-        {1, 44_100, :u24be},
-        {2, 16_000, :u24be}
-      ]
-
-      buffers = [<<0, 0, 1, 255, 255, 255>>, <<255, 255, 255, 255, 255, 255>>]
-      reference = <<255, 255, 255, 255, 255, 255>>
 
       test_for_caps(caps, buffers, reference)
     end
@@ -375,23 +218,6 @@ defmodule Membrane.AudioMixer.DoMixTest do
       test_for_caps(caps, buffers, reference)
     end
 
-    test "samples in :u32le format" do
-      caps = [
-        {1, 16_000, :u32le},
-        {1, 44_100, :u32le},
-        {2, 16_000, :u32le}
-      ]
-
-      buffers = [
-        <<255, 255, 255, 200, 255, 255, 255, 255>>,
-        <<255, 255, 255, 200, 1, 0, 0, 0>>
-      ]
-
-      reference = <<255, 255, 255, 255, 255, 255, 255, 255>>
-
-      test_for_caps(caps, buffers, reference)
-    end
-
     test "samples in :s32be format" do
       caps = [
         {1, 16_000, :s32be},
@@ -408,22 +234,16 @@ defmodule Membrane.AudioMixer.DoMixTest do
 
       test_for_caps(caps, buffers, reference)
     end
+  end
 
-    test "samples in :u32be format" do
-      caps = [
-        {1, 16_000, :u32be},
-        {1, 44_100, :u32be},
-        {2, 16_000, :u32be}
-      ]
-
-      buffers = [
-        <<200, 255, 255, 255, 255, 255, 255, 255>>,
-        <<200, 255, 255, 255, 0, 0, 0, 1>>
-      ]
-
-      reference = <<255, 255, 255, 255, 255, 255, 255, 255>>
-
-      test_for_caps(caps, buffers, reference)
+  describe "Adder should" do
+    test "flush properly" do
+      TestHelper.supported_caps()
+      |> TestHelper.generate_caps()
+      |> Enum.each(fn caps ->
+        state = init(caps)
+        assert flush(state) == {<<>>, state}
+      end)
     end
   end
 end

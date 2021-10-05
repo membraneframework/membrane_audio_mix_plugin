@@ -5,12 +5,12 @@ defmodule Membrane.DdInterleaveTest do
 
   use ExUnit.Case, async: true
 
-  alias Membrane.AudioInterleaver.DoInterleave
-
   require Membrane.Logger
 
+  alias Membrane.AudioInterleaver.DoInterleave
+
   describe "DoInterleaver interleave should" do
-    defp to_pad(key, queue, end_of_stream \\ false) do
+    defp to_pad(key, queue) do
       {{Membrane.Pad, :input, key}, %{end_of_stream: false, queue: queue}}
     end
 

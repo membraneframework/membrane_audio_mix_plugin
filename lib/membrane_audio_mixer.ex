@@ -15,12 +15,16 @@ defmodule Membrane.AudioMixer do
   use Membrane.Filter
   use Bunch
 
-  alias Membrane.AudioMixer.DoMix
+  require Membrane.Logger
+
+  alias Membrane.AudioMixer.{Adder, ClipPreventingAdder}
   alias Membrane.Buffer
   alias Membrane.Caps.Audio.Raw
+  alias Membrane.Caps.Matcher
   alias Membrane.Time
 
-  require Membrane.Logger
+  @supported_caps {Raw,
+                   format: Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])}
 
   def_options caps: [
                 type: :struct,
@@ -39,6 +43,18 @@ defmodule Membrane.AudioMixer do
                 Used when converting demand from buffers into bytes.
                 """,
                 default: 2048
+              ],
+              prevent_clipping: [
+                type: :boolean,
+                spec: boolean(),
+                description: """
+                Defines how the mixer should act in the case when an overflow happens.
+                - If true, the wave will be scaled down, so a peak will become the maximal
+                value of the sample in the format. See `Membrane.AudioMixer.ClipPreventingAdder`.
+                - If false, overflow will be clipped to the maximal value of the sample in
+                the format. See `Membrane.AudioMixer.Adder`.
+                """,
+                default: true
               ]
 
   def_output_pad :output,
@@ -50,7 +66,7 @@ defmodule Membrane.AudioMixer do
     mode: :pull,
     availability: :on_request,
     demand_unit: :bytes,
-    caps: Raw,
+    caps: @supported_caps,
     options: [
       offset: [
         spec: Time.t(),
@@ -60,11 +76,12 @@ defmodule Membrane.AudioMixer do
     ]
 
   @impl true
-  def handle_init(%__MODULE__{} = options) do
+  def handle_init(%__MODULE__{caps: caps} = options) do
     state =
       options
       |> Map.from_struct()
       |> Map.put(:pads, %{})
+      |> then(&if caps == nil, do: &1, else: initialize_mixer_state(caps, &1))
 
     {:ok, state}
   end
@@ -154,12 +171,7 @@ defmodule Membrane.AudioMixer do
 
     {buffer, state} = mix_and_get_buffer(state)
 
-    all_streams_ended =
-      state.pads
-      |> Enum.map(fn {_pad, %{stream_ended: stream_ended}} -> stream_ended end)
-      |> Enum.all?()
-
-    if all_streams_ended do
+    if all_streams_ended?(state) do
       {{:ok, buffer: buffer, end_of_stream: :output}, state}
     else
       {{:ok, buffer: buffer}, state}
@@ -192,8 +204,12 @@ defmodule Membrane.AudioMixer do
       )
 
     if size >= time_frame do
-      {buffer, state} = mix_and_get_buffer(%{state | pads: pads})
-      {{:ok, buffer: buffer}, state}
+      {{_pad, %Buffer{payload: payload}} = buffer, state} =
+        mix_and_get_buffer(%{state | pads: pads})
+
+      redemand = if payload == <<>>, do: [redemand: :output], else: []
+      actions = [{:buffer, buffer} | redemand]
+      {{:ok, actions}, state}
     else
       {{:ok, redemand: :output}, %{state | pads: pads}}
     end
@@ -201,7 +217,8 @@ defmodule Membrane.AudioMixer do
 
   @impl true
   def handle_caps(_pad, caps, _context, %{caps: nil} = state) do
-    state = %{state | caps: caps}
+    state = state |> Map.put(:caps, caps) |> then(&initialize_mixer_state(caps, &1))
+
     {{:ok, caps: {:output, caps}, redemand: :output}, state}
   end
 
@@ -216,6 +233,13 @@ defmodule Membrane.AudioMixer do
       RuntimeError,
       "received invalid caps on pad #{inspect(pad)}, expected: #{inspect(state.caps)}, got: #{inspect(caps)}"
     )
+  end
+
+  defp initialize_mixer_state(caps, state) do
+    mixer_module = if state.prevent_clipping, do: ClipPreventingAdder, else: Adder
+    mixer_state = mixer_module.init(caps)
+
+    Map.put(state, :mixer_state, mixer_state)
   end
 
   defp do_handle_demand(size, %{pads: pads} = state) do
@@ -234,14 +258,21 @@ defmodule Membrane.AudioMixer do
 
     {payload, state} =
       if mix_size >= time_frame do
-        {payload, pads} = mix(pads, mix_size, caps)
+        {payload, pads, state} = mix(pads, mix_size, state)
         pads = remove_finished_pads(pads, time_frame)
-
         state = %{state | pads: pads}
 
         {payload, state}
       else
         {<<>>, state}
+      end
+
+    {payload, state} =
+      if all_streams_ended?(state) do
+        {flushed, state} = flush_mixer(state)
+        {payload <> flushed, state}
+      else
+        {payload, state}
       end
 
     buffer = {:output, %Buffer{payload: payload}}
@@ -261,15 +292,7 @@ defmodule Membrane.AudioMixer do
     number - rest
   end
 
-  defp mix(pads, mix_size, _caps) when map_size(pads) == 1 do
-    [{pad, data}] = Map.to_list(pads)
-
-    <<payload::binary-size(mix_size)>> <> queue = data.queue
-
-    {payload, %{pad => %{data | queue: queue}}}
-  end
-
-  defp mix(pads, mix_size, caps) do
+  defp mix(pads, mix_size, state) do
     {payloads, pads_list} =
       pads
       |> Enum.map(fn
@@ -278,10 +301,16 @@ defmodule Membrane.AudioMixer do
       end)
       |> Enum.unzip()
 
-    payload = DoMix.mix(payloads, caps)
+    {payload, state} = mix_payloads(payloads, state)
     pads = Map.new(pads_list)
 
-    {payload, pads}
+    {payload, pads, state}
+  end
+
+  defp all_streams_ended?(%{pads: pads}) do
+    pads
+    |> Enum.map(fn {_pad, %{stream_ended: stream_ended}} -> stream_ended end)
+    |> Enum.all?()
   end
 
   defp remove_finished_pads(pads, time_frame) do
@@ -291,5 +320,17 @@ defmodule Membrane.AudioMixer do
       pad_data -> [pad_data]
     end)
     |> Map.new()
+  end
+
+  defp mix_payloads(payloads, %{mixer_state: %module{} = mixer_state} = state) do
+    {payload, mixer_state} = module.mix(payloads, mixer_state)
+    state = %{state | mixer_state: mixer_state}
+    {payload, state}
+  end
+
+  defp flush_mixer(%{mixer_state: %module{} = mixer_state} = state) do
+    {payload, mixer_state} = module.flush(mixer_state)
+    state = %{state | mixer_state: mixer_state}
+    {payload, state}
   end
 end

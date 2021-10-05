@@ -11,11 +11,11 @@ defmodule Membrane.AudioInterleaver do
   use Membrane.Filter
   use Bunch
 
+  require Membrane.Logger
+
   alias Membrane.AudioInterleaver.DoInterleave
   alias Membrane.Buffer
   alias Membrane.Caps.Audio.Raw
-
-  require Membrane.Logger
 
   def_options input_caps: [
                 type: :struct,

@@ -8,10 +8,10 @@ defmodule Membrane.AudioInterleaverTest do
 
   import Membrane.Testing.Assertions
 
-  alias Membrane.Testing.Pipeline
-  alias Membrane.Caps.Audio.Raw, as: Caps
-
   require Membrane.Logger
+
+  alias Membrane.Caps.Audio.Raw, as: Caps
+  alias Membrane.Testing.Pipeline
 
   @in1 Path.expand("../fixtures/interleaver/in1.raw", __DIR__)
   @in2 Path.expand("../fixtures/interleaver/in2.raw", __DIR__)
