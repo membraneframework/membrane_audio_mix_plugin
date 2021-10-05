@@ -24,7 +24,9 @@ defmodule Membrane.AudioMixer.ClipPreventingAdder do
   defstruct @enforce_keys ++ [is_wave_positive: true, queue: []]
 
   @type t :: %__MODULE__{
+          caps: Raw.t(),
           is_wave_positive: boolean(),
+          sample_size: integer(),
           queue: [integer()]
         }
 

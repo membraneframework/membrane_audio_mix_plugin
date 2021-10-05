@@ -10,16 +10,25 @@ defmodule Membrane.AudioMixer.Adder do
   alias Membrane.AudioMixer.Helpers
   alias Membrane.Caps.Audio.Raw
 
+  @enforce_keys [:caps, :clipper, :sample_size]
+  defstruct @enforce_keys
+
+  @type t :: %__MODULE__{
+          caps: Raw.t(),
+          clipper: fun(),
+          sample_size: integer()
+        }
+
   @impl true
   def init(caps) do
     size = Raw.sample_size(caps)
     clipper = clipper_factory(caps)
 
-    %{caps: caps, clipper: clipper, sample_size: size}
+    %__MODULE__{caps: caps, clipper: clipper, sample_size: size}
   end
 
   @impl true
-  def mix(buffers, %{sample_size: sample_size} = state) do
+  def mix(buffers, %__MODULE__{sample_size: sample_size} = state) do
     buffer =
       buffers
       |> Helpers.zip_longest_binary_by(sample_size, fn buf -> do_mix(buf, state) end)

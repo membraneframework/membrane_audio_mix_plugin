@@ -81,7 +81,7 @@ defmodule Membrane.AudioMixer do
       options
       |> Map.from_struct()
       |> Map.put(:pads, %{})
-      |> then(&if caps == nil, do: &1, else: initialize_module(caps, &1))
+      |> then(&if caps == nil, do: &1, else: initialize_mixer_state(caps, &1))
 
     {:ok, state}
   end
@@ -217,7 +217,7 @@ defmodule Membrane.AudioMixer do
 
   @impl true
   def handle_caps(_pad, caps, _context, %{caps: nil} = state) do
-    state = state |> Map.put(:caps, caps) |> then(&initialize_module(caps, &1))
+    state = state |> Map.put(:caps, caps) |> then(&initialize_mixer_state(caps, &1))
 
     {{:ok, caps: {:output, caps}, redemand: :output}, state}
   end
@@ -235,13 +235,11 @@ defmodule Membrane.AudioMixer do
     )
   end
 
-  defp initialize_module(caps, state) do
+  defp initialize_mixer_state(caps, state) do
     mixer_module = if state.prevent_clipping, do: ClipPreventingAdder, else: Adder
     mixer_state = mixer_module.init(caps)
 
-    state
-    |> Map.put(:mixer_module, mixer_module)
-    |> Map.put(:mixer_state, mixer_state)
+    Map.put(state, :mixer_state, mixer_state)
   end
 
   defp do_handle_demand(size, %{pads: pads} = state) do
@@ -324,14 +322,14 @@ defmodule Membrane.AudioMixer do
     |> Map.new()
   end
 
-  defp mix_payloads(payloads, %{mixer_module: module} = state) do
-    {payload, mixer_state} = module.mix(payloads, state.mixer_state)
+  defp mix_payloads(payloads, %{mixer_state: %module{} = mixer_state} = state) do
+    {payload, mixer_state} = module.mix(payloads, mixer_state)
     state = %{state | mixer_state: mixer_state}
     {payload, state}
   end
 
-  defp flush_mixer(%{mixer_module: module} = state) do
-    {payload, mixer_state} = module.flush(state.mixer_state)
+  defp flush_mixer(%{mixer_state: %module{} = mixer_state} = state) do
+    {payload, mixer_state} = module.flush(mixer_state)
     state = %{state | mixer_state: mixer_state}
     {payload, state}
   end
