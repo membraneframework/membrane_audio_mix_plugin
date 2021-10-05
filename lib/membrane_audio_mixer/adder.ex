@@ -11,26 +11,25 @@ defmodule Membrane.AudioMixer.Adder do
   alias Membrane.Caps.Audio.Raw
 
   @impl true
-  def init(), do: nil
+  def init(caps) do
+    size = Raw.sample_size(caps)
+    clipper = clipper_factory(caps)
+
+    %{caps: caps, clipper: clipper, sample_size: size}
+  end
 
   @impl true
-  def mix(buffers, caps, state) do
-    sample_size = Raw.sample_size(caps)
-
-    buffers =
+  def mix(buffers, %{sample_size: sample_size} = state) do
+    buffer =
       buffers
-      |> Helpers.zip_longest_binary_by(sample_size, fn buf -> do_mix(buf, mix_params(caps)) end)
+      |> Helpers.zip_longest_binary_by(sample_size, fn buf -> do_mix(buf, state) end)
       |> IO.iodata_to_binary()
 
-    {buffers, state}
+    {buffer, state}
   end
 
   @impl true
-  def flush(_caps, state), do: {<<>>, state}
-
-  defp mix_params(caps) do
-    %{caps: caps, clipper: clipper_factory(caps)}
-  end
+  def flush(state), do: {<<>>, state}
 
   defp clipper_factory(caps) do
     max_sample_value = Raw.sample_max(caps)

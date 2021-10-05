@@ -76,17 +76,12 @@ defmodule Membrane.AudioMixer do
     ]
 
   @impl true
-  def handle_init(%__MODULE__{} = options) do
-    mixer_module = if options.prevent_clipping, do: ClipPreventingAdder, else: Adder
-    mixer_state = mixer_module.init()
-
+  def handle_init(%__MODULE__{caps: caps} = options) do
     state =
       options
       |> Map.from_struct()
       |> Map.put(:pads, %{})
-      |> Map.delete(:prevent_clipping)
-      |> Map.put(:mixer_module, mixer_module)
-      |> Map.put(:mixer_state, mixer_state)
+      |> then(&if caps == nil, do: &1, else: initialize_module(caps, &1))
 
     {:ok, state}
   end
@@ -222,7 +217,7 @@ defmodule Membrane.AudioMixer do
 
   @impl true
   def handle_caps(_pad, caps, _context, %{caps: nil} = state) do
-    state = %{state | caps: caps}
+    state = state |> Map.put(:caps, caps) |> then(&initialize_module(caps, &1))
 
     {{:ok, caps: {:output, caps}, redemand: :output}, state}
   end
@@ -238,6 +233,15 @@ defmodule Membrane.AudioMixer do
       RuntimeError,
       "received invalid caps on pad #{inspect(pad)}, expected: #{inspect(state.caps)}, got: #{inspect(caps)}"
     )
+  end
+
+  defp initialize_module(caps, state) do
+    mixer_module = if state.prevent_clipping, do: ClipPreventingAdder, else: Adder
+    mixer_state = mixer_module.init(caps)
+
+    state
+    |> Map.put(:mixer_module, mixer_module)
+    |> Map.put(:mixer_state, mixer_state)
   end
 
   defp do_handle_demand(size, %{pads: pads} = state) do
@@ -321,13 +325,13 @@ defmodule Membrane.AudioMixer do
   end
 
   defp mix_payloads(payloads, %{mixer_module: module} = state) do
-    {payload, mixer_state} = module.mix(payloads, state.caps, state.mixer_state)
+    {payload, mixer_state} = module.mix(payloads, state.mixer_state)
     state = %{state | mixer_state: mixer_state}
     {payload, state}
   end
 
   defp flush_mixer(%{mixer_module: module} = state) do
-    {payload, mixer_state} = module.flush(state.caps, state.mixer_state)
+    {payload, mixer_state} = module.flush(state.mixer_state)
     state = %{state | mixer_state: mixer_state}
     {payload, state}
   end

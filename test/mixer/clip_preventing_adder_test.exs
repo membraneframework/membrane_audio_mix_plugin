@@ -16,8 +16,9 @@ defmodule Membrane.AudioMixer.ClipPreventingAdderTest do
     |> TestHelper.generate_caps()
     |> Enum.each(fn caps ->
       Membrane.Logger.debug("caps: #{inspect(caps)}")
-      {result, state} = mix(buffers, caps, %ClipPreventingAdder{})
-      {flushed, %ClipPreventingAdder{queue: queue}} = flush(caps, state)
+      state = init(caps)
+      {result, state} = mix(buffers, state)
+      {flushed, %ClipPreventingAdder{queue: queue}} = flush(state)
       assert [] == queue
       assert reference == result <> flushed
     end)
@@ -259,14 +260,11 @@ defmodule Membrane.AudioMixer.ClipPreventingAdderTest do
       |> TestHelper.generate_caps()
       |> Enum.each(fn caps ->
         payload = flushed |> Enum.map(&Raw.value_to_sample(&1, caps)) |> IO.iodata_to_binary()
+        state = caps |> init() |> Map.put(:queue, queue)
 
-        assert {^payload, %ClipPreventingAdder{queue: []}} =
-                 flush(caps, %ClipPreventingAdder{queue: queue})
+        assert {^payload, new_state} = flush(state)
+        assert new_state.queue == []
       end)
-    end
-
-    test "initialize properly " do
-      assert init() == %ClipPreventingAdder{}
     end
 
     test "flush empty queue properly" do

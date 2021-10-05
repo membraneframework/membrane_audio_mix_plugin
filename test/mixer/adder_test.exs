@@ -20,8 +20,9 @@ defmodule Membrane.AudioMixer.AdderTest do
     caps_contents
     |> TestHelper.generate_caps()
     |> Enum.each(fn caps ->
+      state = init(caps)
       Membrane.Logger.debug("caps: #{inspect(caps)}")
-      assert {reference, nil} == mix(buffers, caps, nil)
+      assert {reference, state} == mix(buffers, state)
     end)
   end
 
@@ -236,15 +237,12 @@ defmodule Membrane.AudioMixer.AdderTest do
   end
 
   describe "Adder should" do
-    test "initialize properly " do
-      assert init() == nil
-    end
-
     test "flush properly" do
       TestHelper.supported_caps()
       |> TestHelper.generate_caps()
       |> Enum.each(fn caps ->
-        assert flush(caps, nil) == {<<>>, nil}
+        state = init(caps)
+        assert flush(state) == {<<>>, state}
       end)
     end
   end
