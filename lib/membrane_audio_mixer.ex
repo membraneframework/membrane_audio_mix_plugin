@@ -149,9 +149,11 @@ defmodule Membrane.AudioMixer do
       )
 
     demand_fun = &max(0, &1 - byte_size(silence))
-    {buffer, state} = mix_and_get_buffer(state)
+    {{_pad, %Buffer{payload: payload}} = buffer, state} = mix_and_get_buffer(state)
 
-    {{:ok, demand: {pad, demand_fun}, buffer: buffer}, state}
+    redemand = if payload == <<>>, do: [redemand: :output], else: [demand: {pad, demand_fun}]
+    actions = [{:buffer, buffer} | redemand]
+    {{:ok, actions}, state}
   end
 
   @impl true
