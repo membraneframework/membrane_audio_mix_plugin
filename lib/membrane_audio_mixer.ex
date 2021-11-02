@@ -148,10 +148,8 @@ defmodule Membrane.AudioMixer do
         &%{&1 | queue: silence}
       )
 
-    demand_fun = &max(0, &1 - byte_size(silence))
-    {buffer, state} = mix_and_get_buffer(state)
-
-    {{:ok, demand: {pad, demand_fun}, buffer: buffer}, state}
+    {actions, state} = mix_and_get_actions(state)
+    {{:ok, actions ++ [{:redemand, :output}]}, state}
   end
 
   @impl true
@@ -169,12 +167,12 @@ defmodule Membrane.AudioMixer do
           )
       end
 
-    {buffer, state} = mix_and_get_buffer(state)
+    {actions, state} = mix_and_get_actions(state)
 
     if all_streams_ended?(state) do
-      {{:ok, buffer: buffer, end_of_stream: :output}, state}
+      {{:ok, actions ++ [{:end_of_stream, :output}]}, state}
     else
-      {{:ok, buffer: buffer}, state}
+      {{:ok, actions}, state}
     end
   end
 
@@ -204,11 +202,8 @@ defmodule Membrane.AudioMixer do
       )
 
     if size >= time_frame do
-      {{_pad, %Buffer{payload: payload}} = buffer, state} =
-        mix_and_get_buffer(%{state | pads: pads})
-
-      redemand = if payload == <<>>, do: [redemand: :output], else: []
-      actions = [{:buffer, buffer} | redemand]
+      {actions, state} = mix_and_get_actions(%{state | pads: pads})
+      actions = if actions == [], do: [redemand: :output], else: actions
       {{:ok, actions}, state}
     else
       {{:ok, redemand: :output}, %{state | pads: pads}}
@@ -252,7 +247,7 @@ defmodule Membrane.AudioMixer do
     |> then(fn demands -> {{:ok, demands}, state} end)
   end
 
-  defp mix_and_get_buffer(%{caps: caps, pads: pads} = state) do
+  defp mix_and_get_actions(%{caps: caps, pads: pads} = state) do
     time_frame = Raw.frame_size(caps)
     mix_size = get_mix_size(pads, time_frame)
 
@@ -275,8 +270,8 @@ defmodule Membrane.AudioMixer do
         {payload, state}
       end
 
-    buffer = {:output, %Buffer{payload: payload}}
-    {buffer, state}
+    actions = if payload == <<>>, do: [], else: [buffer: {:output, %Buffer{payload: payload}}]
+    {actions, state}
   end
 
   defp get_mix_size(pads, time_frame) do
