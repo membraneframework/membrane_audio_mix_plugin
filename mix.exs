@@ -9,7 +9,7 @@ defmodule Membrane.AudioMix.Mixfile do
       app: :membrane_audio_mix_plugin,
       version: @version,
       elixir: "~> 1.12",
-      compilers: Mix.compilers(),
+      compilers: [:unifex, :bundlex] ++ Mix.compilers(),
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
@@ -34,12 +34,13 @@ defmodule Membrane.AudioMix.Mixfile do
     [
       {:membrane_core, "~> 0.7.0"},
       {:membrane_caps_audio_raw, "~> 0.4.0"},
+      {:unifex, "~> 0.7.2", override: true},
       {:bunch, "~> 1.0"},
       {:ex_doc, "~> 0.24", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0.0", only: :dev, runtime: false},
       {:credo, "~> 1.5", only: :dev, runtime: false},
       {:membrane_file_plugin, "~> 0.6.0", only: :test},
-      {:membrane_mp3_mad_plugin, "~> 0.7.0", only: :test}
+      {:membrane_mp3_mad_plugin, "~> 0.8.0", only: :test}
     ]
   end
 
@@ -51,7 +52,7 @@ defmodule Membrane.AudioMix.Mixfile do
         "GitHub" => @github_url,
         "Membrane Framework Homepage" => "https://membraneframework.org"
       },
-      files: ["lib", "mix.exs", "README*", "LICENSE*", ".formatter.exs"]
+      files: ["lib", "mix.exs", "README*", "LICENSE*", ".formatter.exs", "bundlex.exs", "c_src"]
     ]
   end
 
