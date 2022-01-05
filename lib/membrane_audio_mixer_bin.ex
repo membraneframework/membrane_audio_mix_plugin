@@ -18,11 +18,10 @@ defmodule Membrane.AudioMixerBin do
   use Membrane.Bin
   use Bunch
 
-  alias Membrane.{Pad, ParentSpec, AudioMixer}
-  alias Membrane.Caps.Audio.Raw
-
   require Membrane.Logger
 
+  alias Membrane.{Pad, ParentSpec, AudioMixer}
+  alias Membrane.Caps.Audio.Raw
   alias Membrane.Caps.Matcher
 
   @supported_caps {Raw,
