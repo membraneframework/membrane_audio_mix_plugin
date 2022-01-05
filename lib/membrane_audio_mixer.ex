@@ -46,7 +46,7 @@ defmodule Membrane.AudioMixer do
               ],
               prevent_clipping: [
                 type: :boolean,
-                 spec: boolean(),
+                spec: boolean(),
                 description: """
                 Defines how the mixer should act in the case when an overflow happens.
                 - If true, the wave will be scaled down, so a peak will become the maximal
