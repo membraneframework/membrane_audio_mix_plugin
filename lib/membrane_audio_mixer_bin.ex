@@ -2,12 +2,12 @@ defmodule Membrane.AudioMixerBin do
   @moduledoc """
   Bin element distributing a mixing job between multiple `Membrane.AudioMixer` elements.
 
-  A tree of AudioMixers is created according to `max_node_degree` parameter:
-  - if number of input tracks is smaller than `max_node_degree`, only one AudioMixer element is created for the entire job
-  - if there are more input tracks than `max_node_degree`, there are created enough mixers so that each mixer has at most
-  `max_node_degree` inputs - outputs from those mixers are then mixed again following the same rules -
+  A tree of AudioMixers is created according to `max_inputs_per_node` parameter:
+  - if number of input tracks is smaller than `max_inputs_per_node`, only one AudioMixer element is created for the entire job
+  - if there are more input tracks than `max_inputs_per_node`, there are created enough mixers so that each mixer has at most
+  `max_inputs_per_node` inputs - outputs from those mixers are then mixed again following the same rules -
   another level of mixers is created having enough mixers so that each mixer on this level has at most
-  `max_node_degree` inputs (those are now the outputs of the previous level mixers).
+  `max_inputs_per_node` inputs (those are now the outputs of the previous level mixers).
   Levels are created until only one mixer in the level is needed - output from this mixer is the final mixed track.
 
   Bin allows for specyfiyng options for `Membrane.AudioMixer`, which are applied for all AudioMixers.
@@ -20,6 +20,7 @@ defmodule Membrane.AudioMixerBin do
 
   require Membrane.Logger
 
+  alias __MODULE__.MixerOptions
   alias Membrane.{Pad, ParentSpec, AudioMixer}
   alias Membrane.Caps.Audio.Raw
   alias Membrane.Caps.Matcher
@@ -27,48 +28,20 @@ defmodule Membrane.AudioMixerBin do
   @supported_caps {Raw,
                    format: Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])}
 
-  def_options max_node_degree: [
+  def_options max_inputs_per_node: [
                 type: :int,
                 description: """
-                Maximum number of inputs to a single mixer in the mixres tree. Must be at least 2.
+                The maximum number of inputs to a single mixer in the mixers tree. Must be at least 2.
                 """,
                 default: 10
               ],
-              inputs: [
-                type: :int,
+              mixer_options: [
+                type: :any,
+                spec: MixerOptions.t(),
                 description: """
-                Number of all input files to be mixed.
-                """
-              ],
-              caps: [
-                type: :struct,
-                spec: Raw.t(),
-                description: """
-                The value defines a raw audio format of pads connected to the
-                element. It should be the same for all the pads.
+                The options that would be passed to each created AudioMixer.
                 """,
                 default: nil
-              ],
-              frames_per_buffer: [
-                type: :integer,
-                spec: pos_integer(),
-                description: """
-                Assumed number of raw audio frames in each buffer.
-                Used when converting demand from buffers into bytes.
-                """,
-                default: 2048
-              ],
-              prevent_clipping: [
-                type: :boolean,
-                spec: boolean(),
-                description: """
-                Defines how the mixer should act in the case when an overflow happens.
-                - If true, the wave will be scaled down, so a peak will become the maximal
-                value of the sample in the format. See `Membrane.AudioMixer.ClipPreventingAdder`.
-                - If false, overflow will be clipped to the maximal value of the sample in
-                the format. See `Membrane.AudioMixer.Adder`.
-                """,
-                default: true
               ]
 
   def_input_pad :input,
@@ -90,123 +63,123 @@ defmodule Membrane.AudioMixerBin do
     availability: :always,
     caps: Raw
 
+  defmodule MixerOptions do
+    @moduledoc """
+    Structure representing options that would be passed to each created Membrane.AudioMixer element.
+    """
+    defstruct caps: nil, frames_per_buffer: 2048, prevent_clipping: true
+
+    @type t :: %__MODULE__{
+            caps: Raw.t(),
+            frames_per_buffer: pos_integer(),
+            prevent_clipping: boolean()
+          }
+  end
+
   @impl true
   def handle_init(options) do
     state =
       options
       |> Map.from_struct()
-      |> Map.put(:added_pad_count, 0)
+      |> Map.put(:inputs, 0)
+      |> Map.update!(:mixer_options, fn val ->
+        if val == nil, do: %MixerOptions{}, else: val
+      end)
 
-    {children, links} = create_mixers_tree(state)
-    spec = %ParentSpec{children: children, links: links}
-
-    {{:ok, spec: spec}, state}
+    {{:ok, spec: %ParentSpec{}}, state}
   end
 
   @impl true
-  def handle_pad_added(
-        _pad_ref,
-        _ctx,
-        %{added_pad_count: added_pad_count, inputs: inputs}
-      )
-      when added_pad_count >= inputs do
-    raise("provided more input pads than specified via `inputs` option (#{inputs})")
+  def handle_pad_added(pad_ref, %{playback_state: :stopped} = ctx, %{inputs: inputs} = state) do
+    %Pad.Data{options: %{offset: offset}} = ctx.pads[pad_ref]
+    {children, links} = link_new_input(pad_ref, offset, state)
+
+    {{:ok, spec: %ParentSpec{children: children, links: links}}, %{state | inputs: inputs + 1}}
   end
 
-  def handle_pad_added(
-        pad_ref,
-        ctx,
-        %{added_pad_count: added_pad_count, max_node_degree: max_node_degree} = state
-      ) do
-    %Pad.Data{options: %{offset: offset}} = ctx.pads[pad_ref]
-    mixer_idx = div(added_pad_count, max_node_degree)
+  def handle_pad_added(_pad_ref, %{playback_state: playback_state}, _state)
+      when playback_state != :stopped do
+    raise("All pads should be added before starting the #{__MODULE__}. \
+Pad added event received in playback state.")
+  end
+
+  @impl true
+  def handle_stopped_to_prepared(_context, state) do
+    {children, links} = create_mixers_tree(state)
+
+    {{:ok, spec: %ParentSpec{children: children, links: links}}, state}
+  end
+
+  # Link new input to correct mixer. Creates mixer if doesn't exist.
+  defp link_new_input(pad_ref, offset, state) do
+    mixer_idx = div(state.inputs, state.max_inputs_per_node)
+    create_new_mixer = rem(state.inputs, state.max_inputs_per_node) == 0
+
+    children =
+      if create_new_mixer do
+        [{"mixer_0_#{mixer_idx}", create_audio_mixer(state.mixer_options)}]
+      else
+        []
+      end
 
     link =
       link_bin_input(pad_ref)
       |> via_in(:input, options: [offset: offset])
       |> to("mixer_0_#{mixer_idx}")
 
-    {{:ok, spec: %ParentSpec{links: [link]}}, %{state | added_pad_count: added_pad_count + 1}}
+    {children, [link]}
   end
 
-  @impl true
-  def handle_stopped_to_prepared(
-        _context,
-        %{inputs: inputs, added_pad_count: inputs} = state
-      ) do
-    {:ok, state}
-  end
+  # Create mixers and links between them. `levels` of the mixers' tree are labeled starting from 0
+  # and counted from the leaves to the root, where one final mixer (root) has the highest level.
+  # Level 0 mixers where created during adding input pads, so only mixers starting from level 1 are created now.
+  defp create_mixers_tree(state, level \\ 1, acc \\ {[], []}, current_level_inputs \\ nil)
 
-  def handle_stopped_to_prepared(
-        _context,
-        %{inputs: inputs, added_pad_count: added_pad_count}
-      )
-      when inputs != added_pad_count do
-    raise(
-      "provided #{added_pad_count} input pads but #{inputs} where specified via `inputs` option"
-    )
-  end
-
-  # create all mixers and links between them - `levels` of the mixers' tree are labeled starting from 0 and counted
-  # from the leaves to the root, where one final mixer (root) has the highest level.
-  defp create_mixers_tree(state, level \\ 0, acc \\ {[], []}, prev_inputs_count \\ nil)
-
-  defp create_mixers_tree(state, 0, _acc, _prev_inputs_count) do
-    n_mixers = ceil(state.inputs / state.max_node_degree)
-
-    children =
-      0..(n_mixers - 1)
-      |> Enum.map(fn i ->
-        {"mixer_#{0}_#{i}",
-         %AudioMixer{
-           caps: state.caps,
-           frames_per_buffer: state.frames_per_buffer,
-           prevent_clipping: state.prevent_clipping
-         }}
-      end)
-
-    create_mixers_tree(state, 1, {children, []}, n_mixers)
+  defp create_mixers_tree(state, 1, {[], []}, nil) do
+    first_level_mixers = ceil(state.inputs / state.max_inputs_per_node)
+    create_mixers_tree(state, 1, {[], []}, first_level_mixers)
   end
 
   # end case - link one final mixer to bin output
   defp create_mixers_tree(_state, level, {children, links}, 1) do
     last_mixer_name = "mixer_#{level - 1}_#{0}"
-    links = [link(last_mixer_name) |> to_bin_output()] ++ links
-    {children, links}
+    links = [link(last_mixer_name) |> to_bin_output() | links]
+
+    {List.flatten(children), List.flatten(links)}
   end
 
-  defp create_mixers_tree(state, level, {children, links}, prev_inputs_count) do
-    n_mixers = ceil(prev_inputs_count / state.max_node_degree)
-
+  defp create_mixers_tree(state, level, {children, links}, current_level_inputs) do
+    n_mixers = ceil(current_level_inputs / state.max_inputs_per_node)
     # create current level of mixers
     new_children =
       0..(n_mixers - 1)
       |> Enum.map(fn i ->
-        {"mixer_#{level}_#{i}",
-         %AudioMixer{
-           caps: state.caps,
-           frames_per_buffer: state.frames_per_buffer,
-           prevent_clipping: state.prevent_clipping
-         }}
+        {"mixer_#{level}_#{i}", create_audio_mixer(state.mixer_options)}
       end)
 
     # link current mixers with mixers from previous level
     new_links =
-      0..(prev_inputs_count - 1)
-      |> Enum.flat_map(fn i ->
-        parent = div(i, state.max_node_degree)
+      0..(current_level_inputs - 1)
+      |> Enum.map(fn i ->
+        parent = div(i, state.max_inputs_per_node)
 
-        [
-          link("mixer_#{level - 1}_#{i}")
-          |> to("mixer_#{level}_#{parent}")
-        ]
+        link("mixer_#{level - 1}_#{i}")
+        |> to("mixer_#{level}_#{parent}")
       end)
 
     create_mixers_tree(
       state,
       level + 1,
-      {children ++ new_children, links ++ new_links},
+      {[new_children | children], [new_links | links]},
       n_mixers
     )
+  end
+
+  defp create_audio_mixer(%MixerOptions{} = mixer_options) do
+    %AudioMixer{
+      caps: mixer_options.caps,
+      frames_per_buffer: mixer_options.frames_per_buffer,
+      prevent_clipping: mixer_options.prevent_clipping
+    }
   end
 end

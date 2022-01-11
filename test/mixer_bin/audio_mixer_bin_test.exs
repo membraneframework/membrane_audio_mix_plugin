@@ -36,7 +36,7 @@ defmodule Membrane.AudioMixerBinTest do
            input_paths,
            output_path_mixer,
            output_path_bin,
-           max_node_degree,
+           max_inputs_per_node,
            audio_format \\ :s16le
          ) do
       caps = %Raw{
@@ -66,10 +66,11 @@ defmodule Membrane.AudioMixerBinTest do
         elements ++
           [
             mixer: %Membrane.AudioMixerBin{
-              max_node_degree: max_node_degree,
-              inputs: length(input_paths),
-              caps: caps,
-              prevent_clipping: false
+              max_inputs_per_node: max_inputs_per_node,
+              mixer_options: %Membrane.AudioMixerBin.MixerOptions{
+                caps: caps,
+                prevent_clipping: false
+              }
             },
             file_sink: %Membrane.File.Sink{location: output_path_bin}
           ]
@@ -131,28 +132,6 @@ defmodule Membrane.AudioMixerBinTest do
       assert {:ok, output_1} = File.read(output_path_mixer)
       assert {:ok, output_2} = File.read(output_path_bin)
       assert output_1 == output_2
-    end
-  end
-
-  describe "AudioMixerBin should create correct layout of AudioMixers" do
-    test "when 1 AudioMixer should be created" do
-      options = %Membrane.AudioMixerBin{
-        max_node_degree: 3,
-        inputs: 2
-      }
-
-      {{:ok, spec: spec}, _state} = Membrane.AudioMixerBin.handle_init(options)
-      assert length(spec.children) == 1
-    end
-
-    test "when multiple AudioMixers should be created" do
-      options = %Membrane.AudioMixerBin{
-        max_node_degree: 3,
-        inputs: 7
-      }
-
-      {{:ok, spec: spec}, _state} = Membrane.AudioMixerBin.handle_init(options)
-      assert length(spec.children) == 4
     end
   end
 end
