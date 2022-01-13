@@ -20,7 +20,6 @@ defmodule Membrane.AudioMixerBin do
 
   require Membrane.Logger
 
-  alias __MODULE__.MixerOptions
   alias Membrane.{Pad, ParentSpec, AudioMixer}
   alias Membrane.Caps.Audio.Raw
   alias Membrane.Caps.Matcher
@@ -36,12 +35,11 @@ defmodule Membrane.AudioMixerBin do
                 default: 10
               ],
               mixer_options: [
-                type: :any,
-                spec: MixerOptions.t(),
+                spec: AudioMixer.t(),
                 description: """
                 The options that would be passed to each created AudioMixer.
                 """,
-                default: nil
+                default: %AudioMixer{}
               ]
 
   def_input_pad :input,
@@ -63,28 +61,12 @@ defmodule Membrane.AudioMixerBin do
     availability: :always,
     caps: Raw
 
-  defmodule MixerOptions do
-    @moduledoc """
-    Structure representing options that would be passed to each created Membrane.AudioMixer element.
-    """
-    defstruct caps: nil, frames_per_buffer: 2048, prevent_clipping: true
-
-    @type t :: %__MODULE__{
-            caps: Raw.t(),
-            frames_per_buffer: pos_integer(),
-            prevent_clipping: boolean()
-          }
-  end
-
   @impl true
   def handle_init(options) do
     state =
       options
       |> Map.from_struct()
       |> Map.put(:inputs, 0)
-      |> Map.update!(:mixer_options, fn val ->
-        if val == nil, do: %MixerOptions{}, else: val
-      end)
 
     {{:ok, spec: %ParentSpec{}}, state}
   end
@@ -99,25 +81,26 @@ defmodule Membrane.AudioMixerBin do
 
   def handle_pad_added(_pad_ref, %{playback_state: playback_state}, _state)
       when playback_state != :stopped do
-    raise("All pads should be added before starting the #{__MODULE__}. \
-Pad added event received in playback state.")
+    raise("""
+    All pads should be added before starting the #{__MODULE__}.
+    Pad added event received in playback state #{playback_state}.
+    """)
   end
 
   @impl true
   def handle_stopped_to_prepared(_context, state) do
     {children, links} = create_mixers_tree(state)
-
     {{:ok, spec: %ParentSpec{children: children, links: links}}, state}
   end
 
-  # Link new input to correct mixer. Creates mixer if doesn't exist.
+  # Link new input to the correct mixer. Creates the mixer if it doesn't exist.
   defp link_new_input(pad_ref, offset, state) do
     mixer_idx = div(state.inputs, state.max_inputs_per_node)
     create_new_mixer = rem(state.inputs, state.max_inputs_per_node) == 0
 
     children =
       if create_new_mixer do
-        [{"mixer_0_#{mixer_idx}", create_audio_mixer(state.mixer_options)}]
+        [{"mixer_0_#{mixer_idx}", state.mixer_options}]
       else
         []
       end
@@ -154,7 +137,7 @@ Pad added event received in playback state.")
     new_children =
       0..(n_mixers - 1)
       |> Enum.map(fn i ->
-        {"mixer_#{level}_#{i}", create_audio_mixer(state.mixer_options)}
+        {"mixer_#{level}_#{i}", state.mixer_options}
       end)
 
     # link current mixers with mixers from previous level
@@ -173,13 +156,5 @@ Pad added event received in playback state.")
       {[new_children | children], [new_links | links]},
       n_mixers
     )
-  end
-
-  defp create_audio_mixer(%MixerOptions{} = mixer_options) do
-    %AudioMixer{
-      caps: mixer_options.caps,
-      frames_per_buffer: mixer_options.frames_per_buffer,
-      prevent_clipping: mixer_options.prevent_clipping
-    }
   end
 end

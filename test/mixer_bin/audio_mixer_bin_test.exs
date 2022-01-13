@@ -67,7 +67,7 @@ defmodule Membrane.AudioMixerBinTest do
           [
             mixer: %Membrane.AudioMixerBin{
               max_inputs_per_node: max_inputs_per_node,
-              mixer_options: %Membrane.AudioMixerBin.MixerOptions{
+              mixer_options: %Membrane.AudioMixer{
                 caps: caps,
                 prevent_clipping: false
               }
