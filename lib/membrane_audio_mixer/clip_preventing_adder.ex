@@ -6,7 +6,7 @@ defmodule Membrane.AudioMixer.ClipPreventingAdder do
 
   Description of the algorithm:
     - Start with an empty queue
-    - Put merged values while the sign of the values remains the same
+    - Enqueue merged values while the sign of the values remains the same
     - If the sign of values changes or adder is flushed:
       - If none of the values overflows limits of the format, convert the queued values
         to binary samples and return them

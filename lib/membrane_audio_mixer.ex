@@ -17,7 +17,7 @@ defmodule Membrane.AudioMixer do
 
   require Membrane.Logger
 
-  alias Membrane.AudioMixer.{Adder, ClipPreventingAdder}
+  alias Membrane.AudioMixer.{Adder, ClipPreventingAdder, NativeAdder}
   alias Membrane.Buffer
   alias Membrane.Caps.Audio.Raw
   alias Membrane.Caps.Matcher
@@ -55,6 +55,16 @@ defmodule Membrane.AudioMixer do
                 the format. See `Membrane.AudioMixer.Adder`.
                 """,
                 default: true
+              ],
+              native_mixer: [
+                type: :boolean,
+                spec: boolean(),
+                description: """
+                The value determines if mixer should use NIFs for mixing audio. Only
+                native version of `Membrane.AudioMixer.ClipPreventingAdder` is available.
+                See `Membrane.AudioMixer.NativeAdder`.
+                """,
+                default: false
               ]
 
   def_output_pad :output,
@@ -77,13 +87,21 @@ defmodule Membrane.AudioMixer do
 
   @impl true
   def handle_init(%__MODULE__{caps: caps} = options) do
-    state =
-      options
-      |> Map.from_struct()
-      |> Map.put(:pads, %{})
-      |> then(&if caps == nil, do: &1, else: initialize_mixer_state(caps, &1))
+    if options.native_mixer && !options.prevent_clipping do
+      Logger.error(
+        "Invalid element options, for native mixer only clipping preventing one is available"
+      )
 
-    {:ok, state}
+      {:error, :invalid_options}
+    else
+      state =
+        options
+        |> Map.from_struct()
+        |> Map.put(:pads, %{})
+        |> then(&if caps == nil, do: &1, else: initialize_mixer_state(caps, &1))
+
+      {:ok, state}
+    end
   end
 
   @impl true
@@ -231,7 +249,13 @@ defmodule Membrane.AudioMixer do
   end
 
   defp initialize_mixer_state(caps, state) do
-    mixer_module = if state.prevent_clipping, do: ClipPreventingAdder, else: Adder
+    mixer_module =
+      if state.prevent_clipping do
+        if state.native_mixer, do: NativeAdder, else: ClipPreventingAdder
+      else
+        Adder
+      end
+
     mixer_state = mixer_module.init(caps)
 
     Map.put(state, :mixer_state, mixer_state)
