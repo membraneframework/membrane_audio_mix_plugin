@@ -11,8 +11,8 @@ defmodule Membrane.AudioMixer.BundlexProject do
     [
       mixer: [
         interface: :nif,
-        sources: ["mixer.c"],
-        pkg_configs: [],
+        sources: ["mixer.c", "raw_audio_lib.c"],
+        deps: [membrane_common_c: :membrane, unifex: :unifex],
         preprocessor: Unifex
       ]
     ]
