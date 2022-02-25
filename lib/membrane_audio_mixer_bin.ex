@@ -20,15 +20,16 @@ defmodule Membrane.AudioMixerBin do
 
   require Membrane.Logger
 
-  alias Membrane.{Pad, ParentSpec, AudioMixer}
+  alias Membrane.{ParentSpec, AudioMixer}
   alias Membrane.Caps.Audio.Raw
   alias Membrane.Caps.Matcher
+  alias Membrane.Bin.PadData
 
   @supported_caps {Raw,
                    format: Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])}
 
   def_options max_inputs_per_node: [
-                type: :int,
+                spec: pos_integer(),
                 description: """
                 The maximum number of inputs to a single mixer in the mixers tree. Must be at least 2.
                 """,
@@ -63,20 +64,14 @@ defmodule Membrane.AudioMixerBin do
 
   @impl true
   def handle_init(options) do
-    state =
-      options
-      |> Map.from_struct()
-      |> Map.put(:inputs, 0)
+    state = options |> Map.from_struct()
 
-    {{:ok, spec: %ParentSpec{}}, state}
+    {:ok, state}
   end
 
   @impl true
-  def handle_pad_added(pad_ref, %{playback_state: :stopped} = ctx, %{inputs: inputs} = state) do
-    %Pad.Data{options: %{offset: offset}} = ctx.pads[pad_ref]
-    {children, links} = link_new_input(pad_ref, offset, state)
-
-    {{:ok, spec: %ParentSpec{children: children, links: links}}, %{state | inputs: inputs + 1}}
+  def handle_pad_added(_pad_ref, %{playback_state: :stopped}, state) do
+    {:ok, state}
   end
 
   def handle_pad_added(_pad_ref, %{playback_state: playback_state}, _state)
@@ -88,73 +83,92 @@ defmodule Membrane.AudioMixerBin do
   end
 
   @impl true
-  def handle_stopped_to_prepared(_context, state) do
-    {children, links} = create_mixers_tree(state)
-    {{:ok, spec: %ParentSpec{children: children, links: links}}, state}
+  def handle_other(:done, ctx, state) do
+    IO.inspect(ctx.pads, label: :other)
+
+    input_pads =
+      ctx.pads
+      |> Map.values()
+      |> Enum.filter(fn %{direction: direction} -> direction == :input end)
+
+    spec = gen_mixing_spec(input_pads, state.max_inputs_per_node, state.mixer_options)
+    {{:ok, spec: spec}, state}
   end
 
-  # Link new input to the correct mixer. Creates the mixer if it doesn't exist.
-  defp link_new_input(pad_ref, offset, state) do
-    mixer_idx = div(state.inputs, state.max_inputs_per_node)
-    create_new_mixer = rem(state.inputs, state.max_inputs_per_node) == 0
+  @spec gen_mixing_spec([PadData.t()], pos_integer(), AudioMixer.t()) ::
+          ParentSpec.t()
+  def gen_mixing_spec(inputs_data, max_degree, mixer_options) do
+    inputs_number = length(inputs_data)
+    levels = ceil(:math.log(inputs_number) / :math.log(max_degree))
+
+    consts = %{
+      max_degree: max_degree,
+      levels: levels,
+      mixer_options: mixer_options
+    }
+
+    # levels will be 0-indexed with tree root being level 0
+    leaves_level = levels - 1
+
+    # links generator to be used only for botttom level of mixing tree
+    links_generator = fn _inputs_number, nodes_num, level ->
+      # inputs_number == length(inputs_data)
+      inputs_data
+      |> Enum.with_index()
+      |> Enum.map(fn {%{ref: pad_ref, options: %{offset: offset}}, i} ->
+        target_node_idx = rem(i, nodes_num)
+
+        link_bin_input(pad_ref)
+        |> via_in(:input, options: [offset: offset])
+        |> to("mixer_#{level}_#{target_node_idx}")
+      end)
+    end
+
+    build_mixers_tree(leaves_level, inputs_number, [], [], consts, links_generator)
+  end
+
+  defp mid_tree_link_generator(inputs_number, level_nodes_num, level) do
+    0..(inputs_number - 1)//1
+    |> Enum.map(fn input_index ->
+      current_level_node_idx = rem(input_index, level_nodes_num)
+
+      link("mixer_#{level + 1}_#{input_index}")
+      |> to("mixer_#{level}_#{current_level_node_idx}")
+    end)
+  end
+
+  defp build_mixers_tree(
+         level_index,
+         inputs_number,
+         elem_acc,
+         link_acc,
+         consts,
+         link_generator \\ &mid_tree_link_generator/3
+       )
+
+  defp build_mixers_tree(level, 1, children, link_acc, _consts, _link_generator)
+       when level < 0 do
+    links = [link("mixer_0_0") |> to_bin_output()] ++ link_acc
+    %ParentSpec{children: children, links: links}
+  end
+
+  defp build_mixers_tree(level, inputs_number, elem_acc, link_acc, consts, link_generator) do
+    nodes_num = ceil(inputs_number / consts.max_degree)
 
     children =
-      if create_new_mixer do
-        [{"mixer_0_#{mixer_idx}", state.mixer_options}]
-      else
-        []
-      end
-
-    link =
-      link_bin_input(pad_ref)
-      |> via_in(:input, options: [offset: offset])
-      |> to("mixer_0_#{mixer_idx}")
-
-    {children, [link]}
-  end
-
-  # Create mixers and links between them. `levels` of the mixers' tree are labeled starting from 0
-  # and counted from the leaves to the root, where one final mixer (root) has the highest level.
-  # Level 0 mixers where created during adding input pads, so only mixers starting from level 1 are created now.
-  defp create_mixers_tree(state, level \\ 1, acc \\ {[], []}, current_level_inputs \\ nil)
-
-  defp create_mixers_tree(state, 1, {[], []}, nil) do
-    first_level_mixers = ceil(state.inputs / state.max_inputs_per_node)
-    create_mixers_tree(state, 1, {[], []}, first_level_mixers)
-  end
-
-  # end case - link one final mixer to bin output
-  defp create_mixers_tree(_state, level, {children, links}, 1) do
-    last_mixer_name = "mixer_#{level - 1}_#{0}"
-    links = [link(last_mixer_name) |> to_bin_output() | links]
-
-    {List.flatten(children), List.flatten(links)}
-  end
-
-  defp create_mixers_tree(state, level, {children, links}, current_level_inputs) do
-    n_mixers = ceil(current_level_inputs / state.max_inputs_per_node)
-    # create current level of mixers
-    new_children =
-      0..(n_mixers - 1)
+      0..(nodes_num - 1)//1
       |> Enum.map(fn i ->
-        {"mixer_#{level}_#{i}", state.mixer_options}
+        {"mixer_#{level}_#{i}", consts.mixer_options}
       end)
 
-    # link current mixers with mixers from previous level
-    new_links =
-      0..(current_level_inputs - 1)
-      |> Enum.map(fn i ->
-        parent = div(i, state.max_inputs_per_node)
+    links = link_generator.(inputs_number, nodes_num, level)
 
-        link("mixer_#{level - 1}_#{i}")
-        |> to("mixer_#{level}_#{parent}")
-      end)
-
-    create_mixers_tree(
-      state,
-      level + 1,
-      {[new_children | children], [new_links | links]},
-      n_mixers
+    build_mixers_tree(
+      level - 1,
+      nodes_num,
+      children ++ elem_acc,
+      links ++ link_acc,
+      consts
     )
   end
 end
