@@ -10,7 +10,7 @@ defmodule Membrane.AudioMixerBin do
   `max_inputs_per_node` inputs (those are now the outputs of the previous level mixers).
   Levels are created until only one mixer in the level is needed - output from this mixer is the final mixed track.
 
-  Bin allows for specyfiyng options for `Membrane.AudioMixer`, which are applied for all AudioMixers.
+  Bin allows for specifying options for `Membrane.AudioMixer`, which are applied for all AudioMixers.
 
   Recommended to use in case of mixing jobs with many inputs.
   """
@@ -84,8 +84,6 @@ defmodule Membrane.AudioMixerBin do
 
   @impl true
   def handle_other(:done, ctx, state) do
-    IO.inspect(ctx.pads, label: :other)
-
     input_pads =
       ctx.pads
       |> Map.values()
@@ -97,6 +95,16 @@ defmodule Membrane.AudioMixerBin do
 
   @spec gen_mixing_spec([PadData.t()], pos_integer(), AudioMixer.t()) ::
           ParentSpec.t()
+  def gen_mixing_spec([single_input_data], _max_degree, mixer_options) do
+    children = [{:mixer, mixer_options}]
+
+    links = [
+      link_bin_input(single_input_data.ref) |> via_in(:input) |> to(:mixer) |> to_bin_output()
+    ]
+
+    %ParentSpec{links: links, children: children}
+  end
+
   def gen_mixing_spec(inputs_data, max_degree, mixer_options) do
     inputs_number = length(inputs_data)
     levels = ceil(:math.log(inputs_number) / :math.log(max_degree))
