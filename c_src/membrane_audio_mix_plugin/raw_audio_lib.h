@@ -2,7 +2,7 @@
 #include <stdbool.h>
 #include <membrane/membrane.h>
 
-#define MAX_SIZE 4;
+#define MAX_SIZE 4
 
 union Value
 {

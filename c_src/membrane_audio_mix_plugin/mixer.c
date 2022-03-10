@@ -19,21 +19,9 @@ UNIFEX_TERM init(UnifexEnv *env, int channels, unsigned int format, int sample_r
     return res;
 }
 
-void get_values(UnifexPayload **buffers, unsigned int buffers_length, int64_t *values, unsigned int *values_length, UnifexState *state)
+void get_values(UnifexPayload **buffers, unsigned int buffers_length, int64_t *values, unsigned int values_length, UnifexState *state)
 {
-    unsigned int min_size = buffers[0]->size;
-    for (unsigned int i = 1; i < buffers_length; ++i)
-    {
-        if (buffers[i]->size < min_size)
-        {
-            min_size = buffers[i]->size;
-        }
-    }
-
-    *values_length = min_size / state->sample_size;
-    values = unifex_alloc(*values_length * sizeof(int64_t));
-
-    for (unsigned int chunk_start = 0, i = 0; chunk_start < min_size; chunk_start += state->sample_size, ++i)
+    for (unsigned int chunk_start = 0, i = 0; i < values_length; chunk_start += state->sample_size, ++i)
     {
         values[i] = 0;
         for (unsigned int j = 0; j < buffers_length; ++j)
@@ -106,12 +94,12 @@ void get_samples(unsigned char *samples, int64_t *values, unsigned int values_le
 
     if (min < state->sample_min)
     {
-        double quotient = min / (state->sample_min * 1.0);
+        double quotient = (state->sample_min * 1.0) / min;
         scale(values, values_length, quotient, state);
     }
     else if (max > state->sample_max)
     {
-        double quotient = max / (state->sample_max * 1.0);
+        double quotient = (state->sample_max * 1.0) / max;
         scale(values, values_length, quotient, state);
     }
 
@@ -131,38 +119,37 @@ void get_samples(unsigned char *samples, int64_t *values, unsigned int values_le
     state->queue_length = 0;
 }
 
-void add_values(int64_t *values, unsigned int values_length, unsigned char *samples, unsigned int *samples_size, bool is_last_wave, UnifexState *state)
+void add_values(int64_t *values, unsigned int values_length, unsigned char *samples, unsigned int *samples_length, UnifexState *state)
 {
+    if (values_length == 0 || !values)
+    {
+        return;
+    }
+
     bool is_wave_positive = state->is_wave_positive;
     unsigned int start = 0;
     unsigned int end = split_values(values, values_length, is_wave_positive);
-    *samples_size = (values_length + state->queue_length) * state->sample_size;
-    samples = unifex_alloc(*samples_size);
+
     unsigned int samples_start = 0;
     while (end < values_length)
     {
         get_samples(samples + samples_start, values + start, end - start, state);
         samples_start += (end - start + state->queue_length) * state->sample_size;
         start = end;
-        state->is_wave_positive = !is_wave_positive;
-        end = split_values(values, values_length, is_wave_positive);
+        is_wave_positive = !is_wave_positive;
+        end = split_values(values + end, values_length - end, is_wave_positive) + end;
     }
 
-    if (is_last_wave)
-    {
-        get_samples(samples + samples_start, values + start, end - start, state);
-        start = end;
-    }
-    else
-    {
-        unsigned int new_queue_length = state->queue_length + end - start;
-        int64_t *new_queue = unifex_alloc(new_queue_length * sizeof(int64_t));
-        memcpy(new_queue, state->queue, state->queue_length * sizeof(int64_t));
-        memcpy(new_queue + state->queue_length, values + start, (end - start) * sizeof(int64_t));
-        state->queue_length = new_queue_length;
-        unifex_free(state->queue);
-        state->queue = new_queue;
-    }
+    state->is_wave_positive = is_wave_positive;
+
+    unsigned int new_queue_length = state->queue_length + end - start;
+    int64_t *new_queue = unifex_alloc(new_queue_length * sizeof(int64_t));
+    memcpy(new_queue, state->queue, state->queue_length * sizeof(int64_t));
+    memcpy(new_queue + state->queue_length, values + start, (end - start) * sizeof(int64_t));
+    state->queue_length = new_queue_length;
+    unifex_free(state->queue);
+    state->queue = new_queue;
+    *samples_length = start;
 }
 
 UNIFEX_TERM mix(UnifexEnv *env, UnifexPayload **buffers, unsigned int buffers_length, UnifexState *state)
@@ -172,16 +159,28 @@ UNIFEX_TERM mix(UnifexEnv *env, UnifexPayload **buffers, unsigned int buffers_le
 
     if (buffers_length > 0)
     {
-        get_values(buffers, buffers_length, values, &values_length, state);
+        unsigned int min_size = buffers[0]->size;
+        for (unsigned int i = 1; i < buffers_length; ++i)
+        {
+            if (buffers[i]->size < min_size)
+            {
+                min_size = buffers[i]->size;
+            }
+        }
+        values_length = min_size / state->sample_size;
+        values = unifex_alloc(values_length * sizeof(int64_t));
+        get_values(buffers, buffers_length, values, values_length, state);
     }
-    unsigned char *samples = NULL;
-    unsigned int samples_size = 0;
-    add_values(values, values_length, samples, &samples_size, false, state);
+    unsigned int samples_length = values_length + state->queue_length;
+    unsigned char *samples = unifex_alloc(samples_length * state->sample_size);
+
+    add_values(values, values_length, samples, &samples_length, state);
 
     unifex_free(values);
     UnifexPayload *out_payload;
-    out_payload = unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, samples_size);
-    memcpy(out_payload->data, samples, samples_size);
+    unsigned int output_size = samples_length * state->sample_size;
+    out_payload = unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, output_size);
+    memcpy(out_payload->data, samples, output_size);
     unifex_free(samples);
 
     UNIFEX_TERM res = mix_result_ok(env, out_payload, state);
@@ -190,13 +189,15 @@ UNIFEX_TERM mix(UnifexEnv *env, UnifexPayload **buffers, unsigned int buffers_le
 
 UNIFEX_TERM flush(UnifexEnv *env, State *state)
 {
-    unsigned char *samples = NULL;
-    unsigned int samples_size = 0;
-    add_values(NULL, 0, samples, &samples_size, true, state);
+    unsigned int samples_length = state->queue_length;
+    unsigned char *samples = unifex_alloc(samples_length * state->sample_size);
+
+    get_samples(samples, NULL, 0, state);
 
     UnifexPayload *out_payload;
-    out_payload = unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, samples_size);
-    memcpy(out_payload->data, samples, samples_size);
+    unsigned int output_size = samples_length * state->sample_size;
+    out_payload = unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, output_size);
+    memcpy(out_payload->data, samples, output_size);
     unifex_free(samples);
 
     UNIFEX_TERM res = flush_result_ok(env, out_payload, state);

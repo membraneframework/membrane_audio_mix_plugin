@@ -4,32 +4,31 @@ int64_t sample_to_value(unsigned char *sample, CapsAudioRaw *caps)
 {
     bool format_le = (caps->format & MEMBRANE_SAMPLE_FORMAT_ENDIANITY) == MEMBRANE_SAMPLE_FORMAT_ENDIANITY_LE;
     unsigned int size = sample_size(caps);
-    unsigned int pad_left = MAX_SIZE;
-    pad_left -= size;
+    unsigned int pad_left = MAX_SIZE - size;
     union Value ret;
     if (format_le)
     {
-        for (unsigned int i = pad_left; i < size + pad_left; ++i)
+        for (unsigned int i = 0; i < size; ++i)
         {
-            ret.bytes[i] = sample[i];
+            ret.bytes[i + pad_left] = sample[i];
         }
     }
     else
     {
-        for (unsigned int i = size - 1 - pad_left, j = pad_left; j < pad_left + size; --i, ++j)
+        for (unsigned int i = MAX_SIZE - 1, j = 0; j < size; --i, ++j)
         {
-            ret.bytes[j] = sample[i];
+            ret.bytes[i] = sample[j];
         }
     }
 
     bool format_u = (caps->format & MEMBRANE_SAMPLE_FORMAT_TYPE) == MEMBRANE_SAMPLE_FORMAT_TYPE_U;
     if (format_u)
     {
-        return (int64_t)ret.u_val;
+        return (int64_t)(ret.u_val >> 8 * pad_left);
     }
     else
     {
-        return (int64_t)ret.s_val;
+        return (int64_t)(ret.s_val >> 8 * pad_left);
     }
 }
 

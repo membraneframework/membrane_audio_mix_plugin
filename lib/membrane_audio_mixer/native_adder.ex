@@ -30,13 +30,13 @@ defmodule Membrane.AudioMixer.NativeAdder do
 
   @impl true
   def mix(buffers, mixer_ref) do
-    Native.mix(buffers, mixer_ref)
-    {<<>>, mixer_ref}
+    {:ok, buffer, mixer_ref} = Native.mix(buffers, mixer_ref)
+    {buffer, mixer_ref}
   end
 
   @impl true
   def flush(mixer_ref) do
-    Native.flush(mixer_ref)
-    {<<>>, mixer_ref}
+    {:ok, buffer, mixer_ref} = Native.flush(mixer_ref)
+    {buffer, mixer_ref}
   end
 end

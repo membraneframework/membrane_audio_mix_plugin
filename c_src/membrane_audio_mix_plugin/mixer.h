@@ -5,6 +5,8 @@
 #include <stdint.h>
 #include "raw_audio_lib.h"
 
+#include <stdio.h>
+
 typedef struct _mixer_state
 {
     CapsAudioRaw *caps;
