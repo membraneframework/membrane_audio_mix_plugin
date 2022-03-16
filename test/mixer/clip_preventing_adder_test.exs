@@ -9,7 +9,7 @@ defmodule Membrane.AudioMixer.ClipPreventingAdderTest do
 
   alias Membrane.AudioMix.TestHelper
   alias Membrane.AudioMixer.ClipPreventingAdder
-  alias Membrane.Caps.Audio.Raw
+  alias Membrane.RawAudio
 
   defp test_for_caps(caps_contents, buffers, reference) do
     caps_contents
@@ -259,7 +259,9 @@ defmodule Membrane.AudioMixer.ClipPreventingAdderTest do
       TestHelper.supported_caps()
       |> TestHelper.generate_caps()
       |> Enum.each(fn caps ->
-        payload = flushed |> Enum.map(&Raw.value_to_sample(&1, caps)) |> IO.iodata_to_binary()
+        payload =
+          flushed |> Enum.map(&RawAudio.value_to_sample(&1, caps)) |> IO.iodata_to_binary()
+
         state = caps |> init() |> Map.put(:queue, queue)
 
         assert {^payload, new_state} = flush(state)

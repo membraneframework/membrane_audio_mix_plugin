@@ -33,7 +33,7 @@ defmodule Membrane.AudioMix.Mixfile do
   defp deps do
     [
       {:membrane_core, "~> 0.9.0"},
-      {:membrane_caps_audio_raw, "~> 0.6.0"},
+      {:membrane_raw_audio_format, "~> 0.8.0"},
       {:bunch, "~> 1.3"},
       {:ex_doc, "~> 0.28", only: :dev, runtime: false},
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},

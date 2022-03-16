@@ -18,13 +18,13 @@ defmodule Membrane.AudioMixer.ClipPreventingAdder do
   @behaviour Membrane.AudioMixer.Mixer
 
   alias Membrane.AudioMixer.Helpers
-  alias Membrane.Caps.Audio.Raw
+  alias Membrane.RawAudio
 
   @enforce_keys [:caps, :sample_size]
   defstruct @enforce_keys ++ [is_wave_positive: true, queue: []]
 
   @type t :: %__MODULE__{
-          caps: Raw.t(),
+          caps: RawAudio.t(),
           is_wave_positive: boolean(),
           sample_size: integer(),
           queue: [integer()]
@@ -32,7 +32,7 @@ defmodule Membrane.AudioMixer.ClipPreventingAdder do
 
   @impl true
   def init(caps) do
-    size = Raw.sample_size(caps)
+    size = RawAudio.sample_size(caps)
 
     %__MODULE__{caps: caps, sample_size: size}
   end
@@ -49,7 +49,7 @@ defmodule Membrane.AudioMixer.ClipPreventingAdder do
 
   defp do_mix(samples, caps) do
     samples
-    |> Enum.map(&Raw.sample_to_value(&1, caps))
+    |> Enum.map(&RawAudio.sample_to_value(&1, caps))
     |> Enum.sum()
   end
 
@@ -81,13 +81,13 @@ defmodule Membrane.AudioMixer.ClipPreventingAdder do
   defp get_iodata(values, %__MODULE__{caps: caps, queue: queue}) do
     (queue ++ values)
     |> scale(caps)
-    |> Enum.map(&Raw.value_to_sample(&1, caps))
+    |> Enum.map(&RawAudio.value_to_sample(&1, caps))
   end
 
   defp scale(values, caps) do
     {min, max} = Enum.min_max(values)
-    max_sample_value = Raw.sample_max(caps)
-    min_sample_value = Raw.sample_min(caps)
+    max_sample_value = RawAudio.sample_max(caps)
+    min_sample_value = RawAudio.sample_min(caps)
 
     cond do
       min < min_sample_value -> do_scale(values, min_sample_value / min)
