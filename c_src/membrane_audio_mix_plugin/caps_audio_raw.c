@@ -1,5 +1,9 @@
 #include "caps_audio_raw.h"
 
+/**
+ * Converts one raw sample into its numeric value, interpreting it for given
+ * format.
+ */
 int64_t caps_audio_raw_sample_to_value(uint8_t *sample, CapsAudioRaw *caps) {
   bool is_format_le =
       (caps->sample_format & MEMBRANE_SAMPLE_FORMAT_ENDIANITY) ==
@@ -31,6 +35,9 @@ int64_t caps_audio_raw_sample_to_value(uint8_t *sample, CapsAudioRaw *caps) {
   }
 }
 
+/**
+ * Converts value into one raw sample, encoding it in given format.
+ */
 void caps_audio_raw_value_to_sample(int64_t value, uint8_t *sample,
                                     CapsAudioRaw *caps) {
   bool is_signed = caps->sample_format & MEMBRANE_SAMPLE_FORMAT_TYPE;
@@ -60,6 +67,9 @@ void caps_audio_raw_value_to_sample(int64_t value, uint8_t *sample,
   }
 }
 
+/**
+ * Returns maximum sample value for given format.
+ */
 int64_t caps_audio_raw_sample_max(CapsAudioRaw *caps) {
   bool is_signed = caps->sample_format & MEMBRANE_SAMPLE_FORMAT_TYPE;
   uint32_t size = caps->sample_format & MEMBRANE_SAMPLE_FORMAT_SIZE;
@@ -70,6 +80,9 @@ int64_t caps_audio_raw_sample_max(CapsAudioRaw *caps) {
   }
 }
 
+/**
+ * Returns minimum sample value for given format.
+ */
 int64_t caps_audio_raw_sample_min(CapsAudioRaw *caps) {
   bool is_signed = caps->sample_format & MEMBRANE_SAMPLE_FORMAT_TYPE;
 
@@ -81,6 +94,9 @@ int64_t caps_audio_raw_sample_min(CapsAudioRaw *caps) {
   }
 }
 
+/**
+ * Returns byte size for given format.
+ */
 uint8_t caps_audio_raw_sample_byte_size(CapsAudioRaw *caps) {
   return (uint8_t)((caps->sample_format & MEMBRANE_SAMPLE_FORMAT_SIZE) / 8);
 }

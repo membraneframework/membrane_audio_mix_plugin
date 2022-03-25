@@ -1,5 +1,9 @@
 #include "mixer.h"
 
+/**
+ * Initializes new native mixer based on number of channels, sample format and
+ * sample rate.
+ */
 UNIFEX_TERM init(UnifexEnv *env, int32_t channels, uint32_t sample_format,
                  int32_t sample_rate) {
   UNIFEX_TERM res;
@@ -19,6 +23,10 @@ UNIFEX_TERM init(UnifexEnv *env, int32_t channels, uint32_t sample_format,
   return res;
 }
 
+/**
+ * Converts the samples from the array of buffers to the values and add them to
+ * themselves, resulting in the single array of values.
+ */
 void get_values(UnifexPayload **buffers, uint32_t buffers_length,
                 int64_t *values, uint32_t values_length, UnifexState *state) {
   for (uint32_t chunk_start = 0, i = 0; i < values_length;
@@ -31,6 +39,9 @@ void get_values(UnifexPayload **buffers, uint32_t buffers_length,
   }
 }
 
+/**
+ * Finds index of the next sign change in values.
+ */
 uint32_t next_sign_change(int64_t *values, uint32_t values_length,
                           bool is_wave_positive) {
   uint32_t i = 0;
@@ -46,6 +57,9 @@ uint32_t next_sign_change(int64_t *values, uint32_t values_length,
   return i;
 }
 
+/**
+ * Scales values and queue by quotient.
+ */
 void scale(int64_t *values, uint32_t values_length, double quotient,
            UnifexState *state) {
 
@@ -58,6 +72,13 @@ void scale(int64_t *values, uint32_t values_length, double quotient,
   }
 }
 
+/**
+ * Takes given values and values in queue and coverts them to samples.
+ *
+ * If any of the values overflows limits of the format, values will be
+ * scaled down so the peak of the wave will become
+ * maximal (minimal) allowed value.
+ */
 void get_samples(uint8_t *samples, int64_t *values, uint32_t values_length,
                  UnifexState *state) {
   int64_t min = state->sample_max;
@@ -109,7 +130,12 @@ void get_samples(uint8_t *samples, int64_t *values, uint32_t values_length,
   state->queue_length = 0;
 }
 
-void add_values(int64_t *values, uint32_t values_length, uint8_t *samples,
+/**
+ * Cuts given values on every sign change and convert it to samples.
+ *
+ * Any remaining values are put into state's queue.
+ */
+void cut_values(int64_t *values, uint32_t values_length, uint8_t *samples,
                 uint32_t *samples_length, UnifexState *state) {
   if (values_length == 0 || !values) {
     return;
@@ -145,6 +171,9 @@ void add_values(int64_t *values, uint32_t values_length, uint8_t *samples,
   *samples_length = samples_size / state->sample_size;
 }
 
+/**
+ *  Mixes `buffers` to one buffer.
+ */
 UNIFEX_TERM mix(UnifexEnv *env, UnifexPayload **buffers,
                 uint32_t buffers_length, UnifexState *state) {
   uint32_t values_length = 0;
@@ -165,7 +194,7 @@ UNIFEX_TERM mix(UnifexEnv *env, UnifexPayload **buffers,
   uint32_t samples_length = values_length + state->queue_length;
   uint8_t *samples = unifex_alloc(samples_length * state->sample_size);
 
-  add_values(values, values_length, samples, &samples_length, state);
+  cut_values(values, values_length, samples, &samples_length, state);
 
   unifex_free(values);
   UnifexPayload *out_payload;
@@ -178,6 +207,9 @@ UNIFEX_TERM mix(UnifexEnv *env, UnifexPayload **buffers,
   return res;
 }
 
+/**
+ * Forces mixer to flush the remaining buffers.
+ */
 UNIFEX_TERM flush(UnifexEnv *env, State *state) {
   uint32_t samples_length = state->queue_length;
   uint8_t *samples = unifex_alloc(samples_length * state->sample_size);
@@ -194,6 +226,9 @@ UNIFEX_TERM flush(UnifexEnv *env, State *state) {
   return res;
 }
 
+/**
+ *  Handles deallocation of mixer's state.
+ */
 void handle_destroy_state(UnifexEnv *env, State *state) {
   if (state) {
     if (state->queue) {
