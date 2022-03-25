@@ -91,16 +91,16 @@ void get_samples(uint8_t *samples, int64_t *values, uint32_t values_length,
     scale(values, values_length, quotient, state);
   }
 
-  int32_t samples_start = 0;
+  int32_t samples_size = 0;
   for (uint32_t i = 0; i < state->queue_length;
-       ++i, samples_start += state->sample_size) {
-    caps_audio_raw_value_to_sample(state->queue[i], samples + samples_start,
+       ++i, samples_size += state->sample_size) {
+    caps_audio_raw_value_to_sample(state->queue[i], samples + samples_size,
                                    state->caps);
   }
 
   for (uint32_t i = 0; i < values_length;
-       ++i, samples_start += state->sample_size) {
-    caps_audio_raw_value_to_sample(values[i], samples + samples_start,
+       ++i, samples_size += state->sample_size) {
+    caps_audio_raw_value_to_sample(values[i], samples + samples_size,
                                    state->caps);
   }
 
@@ -119,10 +119,11 @@ void add_values(int64_t *values, uint32_t values_length, uint8_t *samples,
   uint32_t start = 0;
   uint32_t end = next_sign_change(values, values_length, is_wave_positive);
 
-  uint32_t samples_start = 0;
+  uint32_t samples_size = 0;
   while (end < values_length) {
-    get_samples(samples + samples_start, values + start, end - start, state);
-    samples_start += (end - start + state->queue_length) * state->sample_size;
+    uint32_t queue_length = state->queue_length;
+    get_samples(samples + samples_size, values + start, end - start, state);
+    samples_size += (end - start + queue_length) * state->sample_size;
     start = end;
     is_wave_positive = !is_wave_positive;
     end =
@@ -140,7 +141,8 @@ void add_values(int64_t *values, uint32_t values_length, uint8_t *samples,
   state->queue_length = new_queue_length;
   unifex_free(state->queue);
   state->queue = new_queue;
-  *samples_length = start;
+
+  *samples_length = samples_size / state->sample_size;
 }
 
 UNIFEX_TERM mix(UnifexEnv *env, UnifexPayload **buffers,
@@ -159,6 +161,7 @@ UNIFEX_TERM mix(UnifexEnv *env, UnifexPayload **buffers,
     values = unifex_alloc(values_length * sizeof(int64_t));
     get_values(buffers, buffers_length, values, values_length, state);
   }
+
   uint32_t samples_length = values_length + state->queue_length;
   uint8_t *samples = unifex_alloc(samples_length * state->sample_size);
 

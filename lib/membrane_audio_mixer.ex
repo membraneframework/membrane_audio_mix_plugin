@@ -61,7 +61,7 @@ defmodule Membrane.AudioMixer do
                 spec: boolean(),
                 description: """
                 The value determines if mixer should use NIFs for mixing audio. Only
-                native version of `Membrane.AudioMixer.ClipPreventingAdder` is available.
+                clip preventing version of native mixer is available.
                 See `Membrane.AudioMixer.NativeAdder`.
                 """,
                 default: false
@@ -88,7 +88,7 @@ defmodule Membrane.AudioMixer do
   @impl true
   def handle_init(%__MODULE__{caps: caps} = options) do
     if options.native_mixer && !options.prevent_clipping do
-      Logger.error(
+      Membrane.Logger.error(
         "Invalid element options, for native mixer only clipping preventing one is available"
       )
 

@@ -39,6 +39,7 @@ defmodule Membrane.AudioMixer.ClipPreventingAdder do
 
   @impl true
   def mix(buffers, %__MODULE__{caps: caps, sample_size: sample_size} = state) do
+    # IO.inspect(buffers, label: "mixing native")
     buffers
     |> Helpers.zip_longest_binary_by(sample_size, fn buf -> do_mix(buf, caps) end)
     |> add_values(false, state)

@@ -21,22 +21,25 @@ defmodule Membrane.AudioMixer.NativeAdder do
   alias Membrane.Caps.Audio.Raw
   alias Membrane.AudioMixer.Mixer.Native
 
+  @enforce_keys [:mixer_ref]
+  defstruct @enforce_keys
+
   @impl true
   def init(%Raw{channels: channels, format: format, sample_rate: sample_rate}) do
     {:ok, mixer_ref} = Native.init(channels, Raw.Format.serialize(format), sample_rate)
 
-    mixer_ref
+    %__MODULE__{mixer_ref: mixer_ref}
   end
 
   @impl true
-  def mix(buffers, mixer_ref) do
+  def mix(buffers, %__MODULE__{mixer_ref: mixer_ref}) do
     {:ok, buffer, mixer_ref} = Native.mix(buffers, mixer_ref)
-    {buffer, mixer_ref}
+    {buffer, %__MODULE__{mixer_ref: mixer_ref}}
   end
 
   @impl true
-  def flush(mixer_ref) do
+  def flush(%__MODULE__{mixer_ref: mixer_ref}) do
     {:ok, buffer, mixer_ref} = Native.flush(mixer_ref)
-    {buffer, mixer_ref}
+    {buffer, %__MODULE__{mixer_ref: mixer_ref}}
   end
 end
