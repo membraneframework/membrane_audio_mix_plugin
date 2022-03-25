@@ -230,6 +230,8 @@ UNIFEX_TERM flush(UnifexEnv *env, State *state) {
  *  Handles deallocation of mixer's state.
  */
 void handle_destroy_state(UnifexEnv *env, State *state) {
+  UNIFEX_UNUSED(env);
+
   if (state) {
     if (state->queue) {
       unifex_free(state->queue);
