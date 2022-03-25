@@ -39,7 +39,7 @@ defmodule Membrane.AudioMix.Mixfile do
       {:dialyxir, "~> 1.1", only: :dev, runtime: false},
       {:credo, "~> 1.6", only: :dev, runtime: false},
       {:membrane_file_plugin, "~> 0.8", only: :test},
-      {:membrane_mp3_mad_plugin, "~> 0.10", only: :test}
+      {:membrane_mp3_mad_plugin, "~> 0.11", only: :test}
     ]
   end
 
