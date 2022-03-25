@@ -59,15 +59,15 @@ defmodule Mixing.Pipeline do
       file_src_1: %Membrane.File.Source{location: "/tmp/input_1.raw"},
       file_src_2: %Membrane.File.Source{location: "/tmp/input_2.raw"},
       mixer: %Membrane.AudioMixer{
-        caps: %Membrane.Caps.Audio.Raw{
+        caps: %Membrane.RawAudio{
           channels: 1,
           sample_rate: 16_000,
-          format: :s16le
+          sample_format: :s16le
         }
       },
       converter: %Membrane.FFmpeg.SWResample.Converter{
-        input_caps: %Membrane.Caps.Audio.Raw{channels: 1, sample_rate: 16_000, format: :s16le},
-        output_caps: %Membrane.Caps.Audio.Raw{channels: 2, sample_rate: 48_000, format: :s16le}
+        input_caps: %Membrane.RawAudio{channels: 1, sample_rate: 16_000, sample_format: :s16le},
+        output_caps: %Membrane.RawAudio{channels: 2, sample_rate: 48_000, sample_format: :s16le}
       },
       player: Membrane.PortAudio.Sink
     ]
@@ -103,10 +103,10 @@ defmodule Interleave.Pipeline do
       parser_1: Membrane.WAV.Parser,
       parser_2: Membrane.WAV.Parser,
       interleaver: %Membrane.AudioInterleaver{
-        input_caps: %Membrane.Caps.Audio.Raw{
+        input_caps: %Membrane.RawAudio{
           channels: 1,
           sample_rate: 16_000,
-          format: :s16le
+          sample_format: :s16le
         },
         order: [:left, :right]
       },
