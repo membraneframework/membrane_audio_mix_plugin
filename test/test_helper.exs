@@ -2,7 +2,7 @@ ExUnit.start(capture_log: true)
 
 defmodule Membrane.AudioMix.TestHelper do
   @moduledoc false
-  alias Membrane.Caps.Audio.Raw
+  alias Membrane.RawAudio
 
   @spec supported_caps() :: [{integer(), integer(), atom()}]
   def supported_caps(),
@@ -27,10 +27,10 @@ defmodule Membrane.AudioMix.TestHelper do
     Enum.map(
       caps_contents,
       fn {channels, sample_rate, format} = _caps ->
-        %Raw{
+        %RawAudio{
           channels: channels,
           sample_rate: sample_rate,
-          format: format
+          sample_format: format
         }
       end
     )

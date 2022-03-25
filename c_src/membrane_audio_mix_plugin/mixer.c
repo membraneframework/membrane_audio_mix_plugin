@@ -197,13 +197,14 @@ UNIFEX_TERM mix(UnifexEnv *env, UnifexPayload **buffers,
   cut_values(values, values_length, samples, &samples_length, state);
 
   unifex_free(values);
-  UnifexPayload *out_payload;
+  UnifexPayload out_payload;
   uint32_t output_size = samples_length * state->sample_size;
-  out_payload = unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, output_size);
-  memcpy(out_payload->data, samples, output_size);
+  unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, output_size, &out_payload);
+  memcpy(out_payload.data, samples, output_size);
   unifex_free(samples);
 
-  UNIFEX_TERM res = mix_result_ok(env, out_payload, state);
+  UNIFEX_TERM res = mix_result_ok(env, &out_payload, state);
+  unifex_payload_release(&out_payload);
   return res;
 }
 
@@ -216,13 +217,14 @@ UNIFEX_TERM flush(UnifexEnv *env, State *state) {
 
   get_samples(samples, NULL, 0, state);
 
-  UnifexPayload *out_payload;
+  UnifexPayload out_payload;
   uint32_t output_size = samples_length * state->sample_size;
-  out_payload = unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, output_size);
-  memcpy(out_payload->data, samples, output_size);
+  unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, output_size, &out_payload);
+  memcpy(out_payload.data, samples, output_size);
   unifex_free(samples);
 
-  UNIFEX_TERM res = flush_result_ok(env, out_payload, state);
+  UNIFEX_TERM res = flush_result_ok(env, &out_payload, state);
+  unifex_payload_release(&out_payload);
   return res;
 }
 
