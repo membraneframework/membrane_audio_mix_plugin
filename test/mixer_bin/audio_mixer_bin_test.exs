@@ -6,7 +6,7 @@ defmodule Membrane.AudioMixerBinTest do
   import Membrane.ParentSpec
   import Membrane.Testing.Assertions
 
-  alias Membrane.Caps.Audio.Raw
+  alias Membrane.RawAudio
   alias Membrane.Testing.Pipeline
   alias Membrane.ParentSpec
 
@@ -51,10 +51,10 @@ defmodule Membrane.AudioMixerBinTest do
            max_inputs_per_node,
            audio_format \\ :s16le
          ) do
-      caps = %Raw{
+      caps = %RawAudio{
         channels: 1,
         sample_rate: 16_000,
-        format: audio_format
+        sample_format: audio_format
       }
 
       elements =

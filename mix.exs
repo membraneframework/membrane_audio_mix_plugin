@@ -13,8 +13,16 @@ defmodule Membrane.AudioMix.Mixfile do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
+      dialyzer: [
+        plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
+        flags: [:error_handling]
+      ],
+
+      # hex
       description: "Plugin performing raw audio mixing and interleaving.",
       package: package(),
+
+      # docs
       name: "Membrane Audio Mix plugin",
       source_url: @github_url,
       homepage_url: "https://membraneframework.org",
@@ -33,13 +41,13 @@ defmodule Membrane.AudioMix.Mixfile do
   defp deps do
     [
       {:membrane_core, "~> 0.9.0"},
-      {:membrane_caps_audio_raw, "~> 0.6.0"},
+      {:membrane_raw_audio_format, "~> 0.8.0"},
       {:bunch, "~> 1.3"},
-      {:ex_doc, "~> 0.28", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.1", only: :dev, runtime: false},
-      {:credo, "~> 1.6", only: :dev, runtime: false},
+      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
+      {:dialyxir, ">= 0.0.0", only: :dev, runtime: false},
+      {:credo, ">= 0.0.0", only: :dev, runtime: false},
       {:membrane_file_plugin, "~> 0.8", only: :test},
-      {:membrane_mp3_mad_plugin, "~> 0.10", only: :test}
+      {:membrane_mp3_mad_plugin, "~> 0.11", only: :test}
     ]
   end
 

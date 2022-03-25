@@ -19,16 +19,17 @@ defmodule Membrane.AudioMixer do
 
   alias Membrane.AudioMixer.{Adder, ClipPreventingAdder}
   alias Membrane.Buffer
-  alias Membrane.Caps.Audio.Raw
+  alias Membrane.RawAudio
   alias Membrane.Caps.Matcher
   alias Membrane.Time
 
-  @supported_caps {Raw,
-                   format: Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])}
+  @supported_caps {RawAudio,
+                   sample_format:
+                     Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])}
 
   def_options caps: [
                 type: :struct,
-                spec: Raw.t(),
+                spec: RawAudio.t(),
                 description: """
                 The value defines a raw audio format of pads connected to the
                 element. It should be the same for all the pads.
@@ -60,7 +61,7 @@ defmodule Membrane.AudioMixer do
   def_output_pad :output,
     mode: :pull,
     availability: :always,
-    caps: Raw
+    caps: RawAudio
 
   def_input_pad :input,
     mode: :pull,
@@ -106,7 +107,7 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_prepared_to_playing(_context, %{caps: %Raw{} = caps} = state) do
+  def handle_prepared_to_playing(_context, %{caps: %RawAudio{} = caps} = state) do
     {{:ok, caps: {:output, caps}}, state}
   end
 
@@ -132,14 +133,14 @@ defmodule Membrane.AudioMixer do
         _context,
         %{frames_per_buffer: frames, caps: caps} = state
       ) do
-    size = buffers_count * Raw.frames_to_bytes(frames, caps)
+    size = buffers_count * RawAudio.frames_to_bytes(frames, caps)
     do_handle_demand(size, state)
   end
 
   @impl true
   def handle_start_of_stream(pad, context, state) do
     offset = context.pads[pad].options.offset
-    silence = Raw.sound_of_silence(state.caps, offset)
+    silence = RawAudio.silence(state.caps, offset)
 
     state =
       Bunch.Access.update_in(
@@ -190,7 +191,7 @@ defmodule Membrane.AudioMixer do
         _context,
         %{caps: caps, pads: pads} = state
       ) do
-    time_frame = Raw.frame_size(caps)
+    time_frame = RawAudio.frame_size(caps)
 
     {size, pads} =
       Map.get_and_update(
@@ -248,7 +249,7 @@ defmodule Membrane.AudioMixer do
   end
 
   defp mix_and_get_actions(%{caps: caps, pads: pads} = state) do
-    time_frame = Raw.frame_size(caps)
+    time_frame = RawAudio.frame_size(caps)
     mix_size = get_mix_size(pads, time_frame)
 
     {payload, state} =

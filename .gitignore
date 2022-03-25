@@ -173,4 +173,7 @@ $RECYCLE.BIN/
 # Windows shortcuts
 *.lnk
 
+# Dializer's PLTs
+priv/plts
+
 # End of https://www.gitignore.io/api/c,vim,linux,macos,elixir,windows,visualstudiocode

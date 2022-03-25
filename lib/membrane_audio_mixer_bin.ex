@@ -21,12 +21,13 @@ defmodule Membrane.AudioMixerBin do
   require Membrane.Logger
 
   alias Membrane.{ParentSpec, AudioMixer}
-  alias Membrane.Caps.Audio.Raw
+  alias Membrane.RawAudio
   alias Membrane.Caps.Matcher
   alias Membrane.Bin.PadData
 
-  @supported_caps {Raw,
-                   format: Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])}
+  @supported_caps {RawAudio,
+                   sample_format:
+                     Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])}
 
   def_options max_inputs_per_node: [
                 spec: pos_integer(),
@@ -60,7 +61,7 @@ defmodule Membrane.AudioMixerBin do
     mode: :pull,
     demand_unit: :bytes,
     availability: :always,
-    caps: Raw
+    caps: RawAudio
 
   @impl true
   def handle_init(options) do

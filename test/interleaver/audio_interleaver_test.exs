@@ -10,7 +10,7 @@ defmodule Membrane.AudioInterleaverTest do
 
   require Membrane.Logger
 
-  alias Membrane.Caps.Audio.Raw, as: Caps
+  alias Membrane.RawAudio
   alias Membrane.Testing.Pipeline
 
   @in1 Path.expand("../fixtures/interleaver/in1.raw", __DIR__)
@@ -40,10 +40,10 @@ defmodule Membrane.AudioInterleaverTest do
       end)
       |> Enum.concat(
         interleaver: %Membrane.AudioInterleaver{
-          input_caps: %Caps{
+          input_caps: %RawAudio{
             channels: 1,
             sample_rate: 16_000,
-            format: audio_format
+            sample_format: audio_format
           },
           order: order
         },

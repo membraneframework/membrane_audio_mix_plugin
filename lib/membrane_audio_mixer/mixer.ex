@@ -1,14 +1,14 @@
 defmodule Membrane.AudioMixer.Mixer do
   @moduledoc false
 
-  alias Membrane.Caps.Audio.Raw
+  alias Membrane.RawAudio
 
   @type state_t :: any()
 
   @doc """
   Initializes the mixer's state.
   """
-  @callback init(caps :: Raw.t()) :: state_t()
+  @callback init(caps :: RawAudio.t()) :: state_t()
 
   @doc """
   Mixes `buffers` to one buffer. Given buffers should have equal sizes.

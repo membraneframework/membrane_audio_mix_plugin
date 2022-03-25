@@ -15,11 +15,11 @@ defmodule Membrane.AudioInterleaver do
 
   alias Membrane.AudioInterleaver.DoInterleave
   alias Membrane.Buffer
-  alias Membrane.Caps.Audio.Raw
+  alias Membrane.RawAudio
 
   def_options input_caps: [
                 type: :struct,
-                spec: Raw.t(),
+                spec: RawAudio.t(),
                 description: """
                 The value defines a raw audio format of pads connected to the
                 element. It should be the same for all the pads.
@@ -46,13 +46,13 @@ defmodule Membrane.AudioInterleaver do
   def_output_pad :output,
     mode: :pull,
     availability: :always,
-    caps: Raw
+    caps: RawAudio
 
   def_input_pad :input,
     mode: :pull,
     availability: :on_request,
     demand_unit: :bytes,
-    caps: {Raw, channels: 1},
+    caps: {RawAudio, channels: 1},
     options: [
       offset: [
         spec: Time.t(),
@@ -95,9 +95,9 @@ defmodule Membrane.AudioInterleaver do
   @impl true
   def handle_prepared_to_playing(
         _context,
-        %{input_caps: %Raw{} = input_caps, channels: channels} = state
+        %{input_caps: %RawAudio{} = input_caps, channels: channels} = state
       ) do
-    {{:ok, caps: {:output, %Raw{input_caps | channels: channels}}}, state}
+    {{:ok, caps: {:output, %RawAudio{input_caps | channels: channels}}}, state}
   end
 
   @impl true
@@ -123,14 +123,14 @@ defmodule Membrane.AudioInterleaver do
         _context,
         %{frames_per_buffer: frames, input_caps: input_caps} = state
       ) do
-    size = buffers_count * Raw.frames_to_bytes(frames, input_caps)
+    size = buffers_count * RawAudio.frames_to_bytes(frames, input_caps)
     do_handle_demand(size, state)
   end
 
   @impl true
   def handle_start_of_stream(pad, context, state) do
     offset = context.pads[pad].options.offset
-    silence = Raw.sound_of_silence(state.input_caps, offset)
+    silence = RawAudio.silence(state.input_caps, offset)
 
     state =
       Bunch.Access.update_in(
@@ -179,7 +179,7 @@ defmodule Membrane.AudioInterleaver do
       ) do
     {new_queue_size, state} = enqueue_payload(payload, pad, state)
 
-    if new_queue_size >= Raw.sample_size(input_caps) do
+    if new_queue_size >= RawAudio.sample_size(input_caps) do
       {buffer, state} = interleave(state, min_open_queue_size(state.pads))
       {{:ok, buffer: buffer}, state}
     else
@@ -219,7 +219,7 @@ defmodule Membrane.AudioInterleaver do
   end
 
   defp interleave(%{input_caps: input_caps, pads: pads, order: order} = state, n_bytes) do
-    sample_size = Raw.sample_size(input_caps)
+    sample_size = RawAudio.sample_size(input_caps)
 
     n_bytes = trunc_to_whole_samples(n_bytes, sample_size)
 
@@ -243,10 +243,10 @@ defmodule Membrane.AudioInterleaver do
   end
 
   defp do_append_silence(queue, length_bytes, caps) do
-    missing_frames = ceil((length_bytes - byte_size(queue)) / Raw.frame_size(caps))
+    missing_frames = ceil((length_bytes - byte_size(queue)) / RawAudio.frame_size(caps))
 
     if missing_frames > 0 do
-      silence = caps |> Raw.sound_of_silence() |> String.duplicate(missing_frames)
+      silence = caps |> RawAudio.silence() |> String.duplicate(missing_frames)
       queue <> silence
     else
       queue
