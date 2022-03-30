@@ -128,13 +128,14 @@ void get_samples(uint8_t *samples, int64_t *values, uint32_t values_length,
 /**
  * Takes given values, divides them into parts where every part must have only
  * nonnegative or nonpositive values. The whole part consists of values from the
- * sign change to the sign change. Coverts each of these parts into samples -
+ * sign change to the sign change. Converts each of these parts into samples -
  * values might be scaled down to the limit of the format during conversion.
  *
- * Any remaining values are put into state's queue.
+ * Any remaining values are put into the state's queue.
  */
-void cut_values(int64_t *values, uint32_t values_length, uint8_t *samples,
-                uint32_t *samples_length, UnifexState *state) {
+void chunk_and_scale_to_samples(int64_t *values, uint32_t values_length,
+                                uint8_t *samples, uint32_t *samples_length,
+                                UnifexState *state) {
   if (values_length == 0 || !values) {
     return;
   }
@@ -195,7 +196,8 @@ UNIFEX_TERM mix(UnifexEnv *env, UnifexPayload **buffers,
   uint32_t output_size = output_length * state->sample_size;
   unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, output_size, &out_payload);
 
-  cut_values(values, values_length, out_payload.data, &output_length, state);
+  chunk_and_scale_to_samples(values, values_length, out_payload.data,
+                             &output_length, state);
   unifex_free(values);
   if (output_length < initial_output_length) {
     unifex_payload_realloc(&out_payload, output_length * state->sample_size);

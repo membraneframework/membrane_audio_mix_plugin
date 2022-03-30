@@ -89,16 +89,13 @@ defmodule Membrane.AudioMixer do
   @impl true
   def handle_init(%__MODULE__{caps: caps} = options) do
     if options.native_mixer && !options.prevent_clipping do
-      raise(
-        RuntimeError,
-        "Invalid element options, for native mixer only clipping preventing one is available"
-      )
+      raise("Invalid element options, for native mixer only clipping preventing one is available")
     else
       state =
         options
         |> Map.from_struct()
         |> Map.put(:pads, %{})
-        |> then(&Map.put(&1, :mixer_state, initialize_mixer_state(caps, &1)))
+        |> Map.put(:mixer_state, initialize_mixer_state(caps, options))
 
       {:ok, state}
     end
