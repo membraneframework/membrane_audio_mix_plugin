@@ -41,6 +41,7 @@ defmodule Membrane.AudioMix.Mixfile do
   defp deps do
     [
       {:membrane_core, "~> 0.9.0"},
+      {:membrane_common_c, "~> 0.11.0"},
       {:membrane_raw_audio_format, "~> 0.8.0"},
       {:unifex, "~> 0.7.0"},
       {:bunch, "~> 1.3"},
@@ -48,7 +49,6 @@ defmodule Membrane.AudioMix.Mixfile do
       {:dialyxir, ">= 0.0.0", only: :dev, runtime: false},
       {:credo, ">= 0.0.0", only: :dev, runtime: false},
       {:membrane_file_plugin, "~> 0.8", only: :test},
-      {:membrane_common_c, "~> 0.11.0"},
       {:membrane_mp3_mad_plugin, "~> 0.11", only: :test}
     ]
   end

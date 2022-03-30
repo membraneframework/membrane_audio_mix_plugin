@@ -89,11 +89,10 @@ defmodule Membrane.AudioMixer do
   @impl true
   def handle_init(%__MODULE__{caps: caps} = options) do
     if options.native_mixer && !options.prevent_clipping do
-      Membrane.Logger.error(
+      raise(
+        RuntimeError,
         "Invalid element options, for native mixer only clipping preventing one is available"
       )
-
-      {:error, :invalid_options}
     else
       state =
         options

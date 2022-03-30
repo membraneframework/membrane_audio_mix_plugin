@@ -8,7 +8,7 @@
 #include <stdio.h>
 
 typedef struct _mixer_state {
-  CapsAudioRaw *caps;
+  CapsAudioRaw caps;
   int32_t sample_size;
   int32_t sample_max;
   int32_t sample_min;
