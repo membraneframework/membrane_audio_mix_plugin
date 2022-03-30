@@ -1,7 +1,7 @@
 defmodule Membrane.AudioMixer.NativeAdder do
   @moduledoc """
   Module responsible for mixing audio tracks (all in the same format, with the same number of
-  channels and sample rate). The result is a single path in the format mixed paths are encoded in.
+  channels and sample rate). The result is a single track in the format mixed tracks are encoded in.
   If overflow happens during mixing, a wave will be scaled down to the max sample value. Uses NIFs
   for mixing.
 

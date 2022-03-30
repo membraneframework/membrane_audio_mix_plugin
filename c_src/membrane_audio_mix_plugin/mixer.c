@@ -23,8 +23,8 @@ UNIFEX_TERM init(UnifexEnv *env, int32_t channels, uint32_t sample_format,
 }
 
 /**
- * Converts the samples from the array of buffers to the values and add them to
- * themselves, resulting in the single array of values.
+ * Parses the samples from the array of buffers to arrays of sample values and
+ * then adds them together, creating a single array of sample values.
  */
 void get_values(UnifexPayload **buffers, uint32_t buffers_length,
                 int64_t *values, uint32_t values_length, UnifexState *state) {
@@ -126,7 +126,10 @@ void get_samples(uint8_t *samples, int64_t *values, uint32_t values_length,
 }
 
 /**
- * Cuts given values on every sign change and convert it to samples.
+ * Takes given values, divides them into parts where every part must have only
+ * nonnegative or nonpositive values. The whole part consists of values from the
+ * sign change to the sign change. Coverts each of these parts into samples -
+ * values might be scaled down to the limit of the format during conversion.
  *
  * Any remaining values are put into state's queue.
  */
