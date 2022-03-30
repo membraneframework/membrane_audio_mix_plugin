@@ -98,7 +98,7 @@ defmodule Membrane.AudioMixer do
         options
         |> Map.from_struct()
         |> Map.put(:pads, %{})
-        |> then(&if caps == nil, do: &1, else: initialize_mixer_state(caps, &1))
+        |> then(&Map.put(&1, :mixer_state, initialize_mixer_state(caps, &1)))
 
       {:ok, state}
     end
@@ -130,6 +130,11 @@ defmodule Membrane.AudioMixer do
 
   def handle_prepared_to_playing(_context, %{caps: nil} = state) do
     {:ok, state}
+  end
+
+  @impl true
+  def handle_prepared_to_stopped(_context, state) do
+    {:ok, %{state | mixer_state: nil}}
   end
 
   @impl true
@@ -230,9 +235,10 @@ defmodule Membrane.AudioMixer do
 
   @impl true
   def handle_caps(_pad, caps, _context, %{caps: nil} = state) do
-    state = state |> Map.put(:caps, caps) |> then(&initialize_mixer_state(caps, &1))
+    state = %{state | caps: caps}
+    mixer_state = initialize_mixer_state(caps, state)
 
-    {{:ok, caps: {:output, caps}, redemand: :output}, state}
+    {{:ok, caps: {:output, caps}, redemand: :output}, %{state | mixer_state: mixer_state}}
   end
 
   @impl true
@@ -248,6 +254,8 @@ defmodule Membrane.AudioMixer do
     )
   end
 
+  defp initialize_mixer_state(nil, _state), do: nil
+
   defp initialize_mixer_state(caps, state) do
     mixer_module =
       if state.prevent_clipping do
@@ -256,9 +264,7 @@ defmodule Membrane.AudioMixer do
         Adder
       end
 
-    mixer_state = mixer_module.init(caps)
-
-    Map.put(state, :mixer_state, mixer_state)
+    mixer_module.init(caps)
   end
 
   defp do_handle_demand(size, %{pads: pads} = state) do

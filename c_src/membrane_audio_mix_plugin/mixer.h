@@ -5,8 +5,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include <stdio.h>
-
 typedef struct _mixer_state {
   CapsAudioRaw caps;
   int32_t sample_size;
