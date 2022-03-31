@@ -17,7 +17,7 @@ defmodule Membrane.AudioMixer do
 
   require Membrane.Logger
 
-  alias Membrane.AudioMixer.{Adder, ClipPreventingAdder}
+  alias Membrane.AudioMixer.{Adder, ClipPreventingAdder, NativeAdder}
   alias Membrane.Buffer
   alias Membrane.RawAudio
   alias Membrane.Caps.Matcher
@@ -56,6 +56,16 @@ defmodule Membrane.AudioMixer do
                 the format. See `Membrane.AudioMixer.Adder`.
                 """,
                 default: true
+              ],
+              native_mixer: [
+                type: :boolean,
+                spec: boolean(),
+                description: """
+                The value determines if mixer should use NIFs for mixing audio. Only
+                clip preventing version of native mixer is available.
+                See `Membrane.AudioMixer.NativeAdder`.
+                """,
+                default: false
               ]
 
   def_output_pad :output,
@@ -78,13 +88,17 @@ defmodule Membrane.AudioMixer do
 
   @impl true
   def handle_init(%__MODULE__{caps: caps} = options) do
-    state =
-      options
-      |> Map.from_struct()
-      |> Map.put(:pads, %{})
-      |> then(&if caps == nil, do: &1, else: initialize_mixer_state(caps, &1))
+    if options.native_mixer && !options.prevent_clipping do
+      raise("Invalid element options, for native mixer only clipping preventing one is available")
+    else
+      state =
+        options
+        |> Map.from_struct()
+        |> Map.put(:pads, %{})
+        |> Map.put(:mixer_state, initialize_mixer_state(caps, options))
 
-    {:ok, state}
+      {:ok, state}
+    end
   end
 
   @impl true
@@ -113,6 +127,11 @@ defmodule Membrane.AudioMixer do
 
   def handle_prepared_to_playing(_context, %{caps: nil} = state) do
     {:ok, state}
+  end
+
+  @impl true
+  def handle_prepared_to_stopped(_context, state) do
+    {:ok, %{state | mixer_state: nil}}
   end
 
   @impl true
@@ -213,9 +232,10 @@ defmodule Membrane.AudioMixer do
 
   @impl true
   def handle_caps(_pad, caps, _context, %{caps: nil} = state) do
-    state = state |> Map.put(:caps, caps) |> then(&initialize_mixer_state(caps, &1))
+    state = %{state | caps: caps}
+    mixer_state = initialize_mixer_state(caps, state)
 
-    {{:ok, caps: {:output, caps}, redemand: :output}, state}
+    {{:ok, caps: {:output, caps}, redemand: :output}, %{state | mixer_state: mixer_state}}
   end
 
   @impl true
@@ -231,11 +251,17 @@ defmodule Membrane.AudioMixer do
     )
   end
 
-  defp initialize_mixer_state(caps, state) do
-    mixer_module = if state.prevent_clipping, do: ClipPreventingAdder, else: Adder
-    mixer_state = mixer_module.init(caps)
+  defp initialize_mixer_state(nil, _state), do: nil
 
-    Map.put(state, :mixer_state, mixer_state)
+  defp initialize_mixer_state(caps, state) do
+    mixer_module =
+      if state.prevent_clipping do
+        if state.native_mixer, do: NativeAdder, else: ClipPreventingAdder
+      else
+        Adder
+      end
+
+    mixer_module.init(caps)
   end
 
   defp do_handle_demand(size, %{pads: pads} = state) do

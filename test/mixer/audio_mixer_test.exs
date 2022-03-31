@@ -47,12 +47,14 @@ defmodule Membrane.AudioMixerTest do
       }
 
       preventer_mixer = %Membrane.AudioMixer{mixer | prevent_clipping: true}
+      native_mixer = %Membrane.AudioMixer{preventer_mixer | native_mixer: true}
 
-      {base_elements ++ [mixer: mixer], base_elements ++ [mixer: preventer_mixer]}
+      {base_elements ++ [mixer: mixer], base_elements ++ [mixer: preventer_mixer],
+       base_elements ++ [mixer: native_mixer]}
     end
 
     defp perform_test(
-           {clipper_elements, preventer_elements},
+           {clipper_elements, preventer_elements, native_elements},
            links,
            clipper_reference,
            preventer_reference,
@@ -60,6 +62,7 @@ defmodule Membrane.AudioMixerTest do
          ) do
       do_perform_test(clipper_elements, links, clipper_reference, output_path)
       do_perform_test(preventer_elements, links, preventer_reference, output_path)
+      do_perform_test(native_elements, links, preventer_reference, output_path)
     end
 
     defp do_perform_test(elements, links, reference_path, output_path) do
