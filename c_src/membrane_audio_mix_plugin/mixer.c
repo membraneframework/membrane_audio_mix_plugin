@@ -75,8 +75,8 @@ void scale(int64_t *values, uint32_t values_length, double quotient,
  * scaled down so the peak of the wave will become
  * maximal (minimal) allowed value.
  */
-void get_samples(uint8_t *samples, int64_t *values, uint32_t values_length,
-                 UnifexState *state) {
+void scale_to_samples(uint8_t *samples, int64_t *values, uint32_t values_length,
+                      UnifexState *state) {
   int64_t min = state->sample_max;
   int64_t max = state->sample_min;
 
@@ -147,7 +147,8 @@ void chunk_and_scale_to_samples(int64_t *values, uint32_t values_length,
   uint32_t samples_size = 0;
   while (end < values_length) {
     uint32_t queue_length = state->queue_length;
-    get_samples(samples + samples_size, values + start, end - start, state);
+    scale_to_samples(samples + samples_size, values + start, end - start,
+                     state);
     samples_size += (end - start + queue_length) * state->sample_size;
     start = end;
     is_wave_positive = !is_wave_positive;
@@ -215,7 +216,7 @@ UNIFEX_TERM flush(UnifexEnv *env, State *state) {
   uint32_t samples_length = state->queue_length;
   uint8_t *samples = unifex_alloc(samples_length * state->sample_size);
 
-  get_samples(samples, NULL, 0, state);
+  scale_to_samples(samples, NULL, 0, state);
 
   UnifexPayload out_payload;
   uint32_t output_size = samples_length * state->sample_size;
