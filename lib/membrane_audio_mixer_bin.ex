@@ -98,9 +98,13 @@ defmodule Membrane.AudioMixerBin do
           ParentSpec.t()
   def gen_mixing_spec([single_input_data], _max_degree, mixer_options) do
     children = [{:mixer, mixer_options}]
+    offset = single_input_data.options.offset
 
     links = [
-      link_bin_input(single_input_data.ref) |> via_in(:input) |> to(:mixer) |> to_bin_output()
+      link_bin_input(single_input_data.ref)
+      |> via_in(:input, options: [offset: offset])
+      |> to(:mixer)
+      |> to_bin_output()
     ]
 
     %ParentSpec{links: links, children: children}
