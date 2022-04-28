@@ -52,7 +52,7 @@ defmodule Membrane.AudioInterleaver do
     mode: :pull,
     availability: :on_request,
     demand_unit: :bytes,
-    caps: {RawAudio, channels: 1},
+    caps: [{RawAudio, channels: 1}, Membrane.RemoteStream],
     options: [
       offset: [
         spec: Time.t(),
@@ -195,7 +195,24 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
+  def handle_caps(
+        _pad,
+        %Membrane.RemoteStream{} = _input_caps,
+        _context,
+        %{input_caps: nil} = _state
+      ) do
+    raise """
+    You need to specify `input_caps` in options if `Membrane.RemoteStream` will be received on the `:input` pad
+    """
+  end
+
+  @impl true
   def handle_caps(_pad, input_caps, _context, %{input_caps: input_caps} = state) do
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_caps(_pad, %Membrane.RemoteStream{} = _input_caps, _context, state) do
     {:ok, state}
   end
 

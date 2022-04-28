@@ -18,7 +18,7 @@ defmodule Membrane.AudioMixerBinTest do
     @impl true
     def handle_init(%{spec: spec, bin_name: name}) do
       send(self(), {:continue, name})
-      {{:ok, spec: spec}, %{}}
+      {{:ok, spec: spec, playback: :playing}, %{}}
     end
 
     @impl true
@@ -107,10 +107,9 @@ defmodule Membrane.AudioMixerBinTest do
 
     defp play_pipeline(pipeline_options) do
       assert {:ok, pid} = Pipeline.start_link(pipeline_options)
-      assert Pipeline.play(pid) == :ok
       assert_start_of_stream(pid, :file_sink, :input)
       assert_end_of_stream(pid, :file_sink, :input)
-      Pipeline.stop_and_terminate(pid, blocking?: true)
+      Pipeline.terminate(pid, blocking?: true)
     end
 
     test "there's only one input", ctx do

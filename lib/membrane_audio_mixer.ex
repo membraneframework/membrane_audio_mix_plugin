@@ -23,9 +23,11 @@ defmodule Membrane.AudioMixer do
   alias Membrane.Caps.Matcher
   alias Membrane.Time
 
-  @supported_caps {RawAudio,
-                   sample_format:
-                     Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])}
+  @supported_caps [
+    {RawAudio,
+     sample_format: Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])},
+    Membrane.RemoteStream
+  ]
 
   def_options caps: [
                 type: :struct,
@@ -239,7 +241,24 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
+  def handle_caps(
+        _pad,
+        %Membrane.RemoteStream{} = _input_caps,
+        _context,
+        %{input_caps: nil} = _state
+      ) do
+    raise """
+    You need to specify `caps` in options if `Membrane.RemoteStream` will be received on the `:input` pad
+    """
+  end
+
+  @impl true
   def handle_caps(_pad, caps, _context, %{caps: caps} = state) do
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_caps(_pad, %Membrane.RemoteStream{} = _input_caps, _context, state) do
     {:ok, state}
   end
 
