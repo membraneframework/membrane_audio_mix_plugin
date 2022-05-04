@@ -69,9 +69,8 @@ defmodule Membrane.AudioMixerTest do
       pipeline_options = %Pipeline.Options{elements: elements, links: links}
       assert {:ok, pid} = Pipeline.start_link(pipeline_options)
 
-      assert Pipeline.play(pid) == :ok
       assert_end_of_stream(pid, :file_sink, :input, 5_000)
-      Pipeline.stop_and_terminate(pid, blocking?: true)
+      Pipeline.terminate(pid, blocking?: true)
 
       assert {:ok, reference_file} = File.read(reference_path)
       assert {:ok, output_file} = File.read(output_path)
@@ -223,10 +222,8 @@ defmodule Membrane.AudioMixerTest do
     defp perform_test(elements, links) do
       pipeline_options = %Pipeline.Options{elements: elements, links: links}
       assert {:ok, pid} = Pipeline.start_link(pipeline_options)
-
-      assert Pipeline.play(pid) == :ok
       assert_end_of_stream(pid, :file_sink, :input, 5_000)
-      Pipeline.stop_and_terminate(pid, blocking?: true)
+      Pipeline.terminate(pid, blocking?: true)
     end
 
     test "when they match and Mixer has its own caps" do

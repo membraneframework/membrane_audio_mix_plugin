@@ -25,9 +25,11 @@ defmodule Membrane.AudioMixerBin do
   alias Membrane.Caps.Matcher
   alias Membrane.Bin.PadData
 
-  @supported_caps {RawAudio,
-                   sample_format:
-                     Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])}
+  @supported_caps [
+    {RawAudio,
+     sample_format: Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])},
+    Membrane.RemoteStream
+  ]
 
   def_options max_inputs_per_node: [
                 spec: pos_integer(),
