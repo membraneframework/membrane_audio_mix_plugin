@@ -41,7 +41,10 @@ defmodule Membrane.AudioMix.Mixfile do
   defp deps do
     [
       {:membrane_core, "~> 0.9.0"},
-      {:membrane_common_c, "~> 0.11.0"},
+      {:membrane_common_c,
+       git: "https://github.com/membraneframework/membrane_common_c.git",
+       ref: "4ee93ea70c0dc134e0c32b99f3a80fa1e82486ec",
+       override: true},
       {:membrane_raw_audio_format, "~> 0.8.0"},
       {:unifex, "~> 0.7.0"},
       {:bunch, "~> 1.3"},
