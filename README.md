@@ -35,7 +35,8 @@ Mixing and interleaving is tested only for integer audio formats.
 ### Mixer
 
 The Mixer adds samples from all pads. It has two strategies to deal with the overflow:
-scaling down waves and clipping.
+scaling down waves and clipping. There's also the faster, semi-native version of the Mixer. 
+Only the scaling-down strategy is available in the native Mixer.
 
 ### Interleaver
 
@@ -129,7 +130,62 @@ defmodule Interleave.Pipeline do
     {{:ok, spec: %ParentSpec{children: children, links: links}}, %{}}
   end
 end
+```
 
+### AudioMixerBin
+
+```elixir
+defmodule MixingBin.Pipeline do
+  use Membrane.Pipeline
+
+  @impl true
+  def handle_init(_) do
+    children = [
+      file_src_1: %Membrane.File.Source{location: "/tmp/input-1.raw"},
+      file_src_2: %Membrane.File.Source{location: "/tmp/input-2.raw"},
+      file_src_3: %Membrane.File.Source{location: "/tmp/input-3.raw"},
+      file_src_4: %Membrane.File.Source{location: "/tmp/input-4.raw"},
+      mixer_bin: %Membrane.AudioMixerBin{
+        max_inputs_per_node: 2,
+        mixer_options: %Membrane.AudioMixer{
+          caps: %Membrane.RawAudio{
+            channels: 1,
+            sample_rate: 16_000,
+            sample_format: :s16le
+          },
+          prevent_clipping: false
+        }
+      },
+      converter: %Membrane.FFmpeg.SWResample.Converter{
+        input_caps: %Membrane.RawAudio{channels: 1, sample_rate: 16_000, sample_format: :s16le},
+        output_caps: %Membrane.RawAudio{channels: 2, sample_rate: 48_000, sample_format: :s16le}
+      },
+      player: Membrane.PortAudio.Sink
+    ]
+
+    links = [
+      link(:file_src_1)
+      |> to(:mixer_bin)
+      |> to(:converter)
+      |> to(:player),
+      link(:file_src_2)
+      |> to(:mixer_bin),
+      link(:file_src_3)
+      |> to(:mixer_bin),
+      link(:file_src_4)
+      |> to(:mixer_bin)
+    ]
+
+    send(self(), {:linking_finished, :mixer_bin})
+
+    {{:ok, spec: %ParentSpec{children: children, links: links}}, %{}}
+  end
+
+  @impl true
+  def handle_other({:linking_finished, name}, _ctx, state) do
+    {{:ok, forward: {name, :linking_finished}}, state}
+  end
+end
 ```
 
 ## Copyright and License
