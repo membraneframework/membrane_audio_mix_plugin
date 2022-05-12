@@ -17,13 +17,13 @@ defmodule Membrane.AudioMixerBinTest do
     use Membrane.Pipeline
     @impl true
     def handle_init(%{spec: spec, bin_name: name}) do
-      send(self(), {:continue, name})
+      send(self(), {:linking_finished, name})
       {{:ok, spec: spec}, %{}}
     end
 
     @impl true
-    def handle_other({:continue, name}, _ctx, state) do
-      {{:ok, forward: {name, :done}}, state}
+    def handle_other({:linking_finished, name}, _ctx, state) do
+      {{:ok, forward: {name, :linking_finished}}, state}
     end
   end
 

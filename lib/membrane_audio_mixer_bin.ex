@@ -84,7 +84,7 @@ defmodule Membrane.AudioMixerBin do
   end
 
   @impl true
-  def handle_other(:done, ctx, state) do
+  def handle_other(:linking_finished, ctx, state) do
     input_pads =
       ctx.pads
       |> Map.values()
