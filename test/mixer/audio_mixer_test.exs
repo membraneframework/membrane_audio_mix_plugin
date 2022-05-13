@@ -65,8 +65,8 @@ defmodule Membrane.AudioMixerTest do
       do_perform_test(native_elements, links, preventer_reference, output_path)
     end
 
-    defp do_perform_test(elements, links, reference_path, output_path) do
-      pipeline_options = %Pipeline.Options{elements: elements, links: links}
+    defp do_perform_test(children, links, reference_path, output_path) do
+      pipeline_options = [children: children, links: links]
       assert {:ok, pid} = Pipeline.start_link(pipeline_options)
 
       assert_end_of_stream(pid, :file_sink, :input, 5_000)
@@ -219,8 +219,8 @@ defmodule Membrane.AudioMixerTest do
       ]
     end
 
-    defp perform_test(elements, links) do
-      pipeline_options = %Pipeline.Options{elements: elements, links: links}
+    defp perform_test(children, links) do
+      pipeline_options = [children: children, links: links]
       assert {:ok, pid} = Pipeline.start_link(pipeline_options)
       assert_end_of_stream(pid, :file_sink, :input, 5_000)
       Pipeline.terminate(pid, blocking?: true)

@@ -64,7 +64,7 @@ defmodule Membrane.AudioMixerBinTest do
           {"file_src_#{index}", %Membrane.File.Source{location: path}}
         end)
 
-      elements_mixer =
+      children_mixer =
         elements ++
           [
             mixer: %Membrane.AudioMixer{
@@ -95,12 +95,12 @@ defmodule Membrane.AudioMixerBinTest do
 
       links = links ++ [link(:mixer) |> to(:file_sink)]
 
-      mixer_pipeline = %Pipeline.Options{elements: elements_mixer, links: links}
+      mixer_pipeline = [children: children_mixer, links: links]
 
-      mixer_bin_pipeline = %Pipeline.Options{
+      mixer_bin_pipeline = [
         module: BinTestPipeline,
         custom_args: %{spec: %ParentSpec{children: elements_bin, links: links}, bin_name: :mixer}
-      }
+      ]
 
       {mixer_pipeline, mixer_bin_pipeline}
     end
