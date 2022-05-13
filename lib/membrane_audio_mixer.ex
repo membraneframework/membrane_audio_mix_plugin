@@ -19,8 +19,8 @@ defmodule Membrane.AudioMixer do
 
   alias Membrane.AudioMixer.{Adder, ClipPreventingAdder, NativeAdder}
   alias Membrane.Buffer
-  alias Membrane.RawAudio
   alias Membrane.Caps.Matcher
+  alias Membrane.RawAudio
   alias Membrane.Time
 
   @supported_caps [

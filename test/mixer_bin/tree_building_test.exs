@@ -3,8 +3,8 @@ defmodule Membrane.AudioMixerBin.TreeBuildingTest do
 
   import Membrane.ParentSpec
 
-  alias Membrane.AudioMixerBin, as: Bin
   alias Membrane.AudioMixer, as: Opts
+  alias Membrane.AudioMixerBin, as: Bin
   alias Membrane.ParentSpec
 
   test "single mixing node" do

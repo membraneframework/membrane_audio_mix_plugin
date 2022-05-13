@@ -6,9 +6,9 @@ defmodule Membrane.AudioMixerBinTest do
   import Membrane.ParentSpec
   import Membrane.Testing.Assertions
 
+  alias Membrane.ParentSpec
   alias Membrane.RawAudio
   alias Membrane.Testing.Pipeline
-  alias Membrane.ParentSpec
 
   @input_path_1 Path.expand("../fixtures/mixer_bin/input-1.raw", __DIR__)
   @input_path_2 Path.expand("../fixtures/mixer_bin/input-2.raw", __DIR__)

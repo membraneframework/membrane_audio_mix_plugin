@@ -20,10 +20,9 @@ defmodule Membrane.AudioMixerBin do
 
   require Membrane.Logger
 
-  alias Membrane.{ParentSpec, AudioMixer}
-  alias Membrane.RawAudio
-  alias Membrane.Caps.Matcher
+  alias Membrane.{AudioMixer, ParentSpec, RawAudio}
   alias Membrane.Bin.PadData
+  alias Membrane.Caps.Matcher
 
   @supported_caps [
     {RawAudio,
