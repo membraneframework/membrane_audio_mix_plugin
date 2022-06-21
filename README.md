@@ -35,7 +35,7 @@ Mixing and interleaving is tested only for integer audio formats.
 ### Mixer
 
 The Mixer adds samples from all pads. It has two strategies to deal with the overflow:
-scaling down waves and clipping. There's also the faster, semi-native version of the Mixer. 
+scaling down waves and clipping. There's also the faster, semi-native version of the Mixer.
 Only the scaling-down strategy is available in the native Mixer.
 
 ### Interleaver
@@ -49,6 +49,9 @@ Each channel must be named by providing an input pad name and the channel layout
 ## Usage Example
 
 ### AudioMixer
+
+The following pipeline takes two raw audio files as input, mixes them using `AudioMixer`, and then plays the result.
+Five seconds offset is applied to the second file.
 
 ```elixir
 defmodule Mixing.Pipeline do
@@ -93,8 +96,8 @@ end
 
 ### Native AudioMixer
 
-Pipeline for this example is exactly the same as for `AudioMixer`, the only difference 
-being `mixer`.
+The pipeline for this example is the same as for [`AudioMixer`](#audiomixer),
+the only difference being the `mixer`.
 
 ```elixir
 ...
@@ -104,13 +107,16 @@ being `mixer`.
         sample_rate: 16_000,
         sample_format: :s16le
       },
-      native_mixer: true, 
+      native_mixer: true,
       prevent_clipping: true
     }
 ...
 ```
 
 ### AudioInterleaver
+
+The following pipeline takes two `wav` audio files as input, interleaves them,
+and then saves them as a single raw audio file.
 
 ```elixir
 defmodule Interleave.Pipeline do
@@ -155,6 +161,22 @@ end
 ```
 
 ### AudioMixerBin
+
+The following pipeline takes four raw audio files as input, mixes them using `AudioMixerBin`, and plays the result.
+Because `max_inputs_per_node` equals 2, the `AudioMixerBin` should create a 3-node tree of depth 1.
+
+```
+src_1 src_2 src_3 src_4
+  |     |     |     |
+   \   /       \   /
+    \ /         \ /
+ mixer_1_0   mixer_1_1
+     |           |
+      \         /
+       \       /
+       mixer_0_0
+           |
+```
 
 ```elixir
 defmodule MixingBin.Pipeline do
@@ -214,8 +236,8 @@ end
 
 ### AudioMixerBin with native AudioMixer
 
-Pipeline for this example is exactly the same as for `AudioMixerBin`, the only difference 
-being `mixer_options`.
+The pipeline for this example is the same as for [`AudioMixerBin`](#audiomixerbin),
+the only difference being `mixer_options`.
 
 ```elixir
 ...
@@ -225,7 +247,7 @@ being `mixer_options`.
         sample_rate: 16_000,
         sample_format: :s16le
       },
-      native_mixer: true, 
+      native_mixer: true,
       prevent_clipping: true
     }
 ...
