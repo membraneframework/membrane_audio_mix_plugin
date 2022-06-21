@@ -56,16 +56,19 @@ defmodule Mixing.Pipeline do
 
   @impl true
   def handle_init(_) do
+    mixer = %Membrane.AudioMixer{
+      caps: %Membrane.RawAudio{
+        channels: 1,
+        sample_rate: 16_000,
+        sample_format: :s16le
+      },
+      prevent_clipping: false
+    }
+
     children = [
       file_src_1: %Membrane.File.Source{location: "/tmp/input_1.raw"},
       file_src_2: %Membrane.File.Source{location: "/tmp/input_2.raw"},
-      mixer: %Membrane.AudioMixer{
-        caps: %Membrane.RawAudio{
-          channels: 1,
-          sample_rate: 16_000,
-          sample_format: :s16le
-        }
-      },
+      mixer: mixer,
       converter: %Membrane.FFmpeg.SWResample.Converter{
         input_caps: %Membrane.RawAudio{channels: 1, sample_rate: 16_000, sample_format: :s16le},
         output_caps: %Membrane.RawAudio{channels: 2, sample_rate: 48_000, sample_format: :s16le}
@@ -86,6 +89,25 @@ defmodule Mixing.Pipeline do
     {{:ok, spec: %ParentSpec{children: children, links: links}}, %{}}
   end
 end
+```
+
+### Native AudioMixer
+
+Pipeline for this example is exactly the same as for `AudioMixer`, the only difference 
+being `mixer`.
+
+```elixir
+...
+    mixer = %Membrane.AudioMixer{
+      caps: %Membrane.RawAudio{
+        channels: 1,
+        sample_rate: 16_000,
+        sample_format: :s16le
+      },
+      native_mixer: true, 
+      prevent_clipping: true
+    }
+...
 ```
 
 ### AudioInterleaver
@@ -140,6 +162,15 @@ defmodule MixingBin.Pipeline do
 
   @impl true
   def handle_init(_) do
+    mixer_options = %Membrane.AudioMixer{
+      caps: %Membrane.RawAudio{
+        channels: 1,
+        sample_rate: 16_000,
+        sample_format: :s16le
+      },
+      prevent_clipping: false
+    }
+
     children = [
       file_src_1: %Membrane.File.Source{location: "/tmp/input-1.raw"},
       file_src_2: %Membrane.File.Source{location: "/tmp/input-2.raw"},
@@ -147,14 +178,7 @@ defmodule MixingBin.Pipeline do
       file_src_4: %Membrane.File.Source{location: "/tmp/input-4.raw"},
       mixer_bin: %Membrane.AudioMixerBin{
         max_inputs_per_node: 2,
-        mixer_options: %Membrane.AudioMixer{
-          caps: %Membrane.RawAudio{
-            channels: 1,
-            sample_rate: 16_000,
-            sample_format: :s16le
-          },
-          prevent_clipping: false
-        }
+        mixer_options: mixer_options
       },
       converter: %Membrane.FFmpeg.SWResample.Converter{
         input_caps: %Membrane.RawAudio{channels: 1, sample_rate: 16_000, sample_format: :s16le},
@@ -186,6 +210,25 @@ defmodule MixingBin.Pipeline do
     {{:ok, forward: {name, :linking_finished}}, state}
   end
 end
+```
+
+### AudioMixerBin with native AudioMixer
+
+Pipeline for this example is exactly the same as for `AudioMixerBin`, the only difference 
+being `mixer_options`.
+
+```elixir
+...
+    mixer_options = %Membrane.AudioMixer{
+      caps: %Membrane.RawAudio{
+        channels: 1,
+        sample_rate: 16_000,
+        sample_format: :s16le
+      },
+      native_mixer: true, 
+      prevent_clipping: true
+    }
+...
 ```
 
 ## Copyright and License
