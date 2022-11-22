@@ -68,6 +68,14 @@ defmodule Membrane.AudioMixer do
                 See `Membrane.AudioMixer.NativeAdder`.
                 """,
                 default: false
+              ],
+              use_timestamps: [
+                type: :boolean,
+                spec: boolean(),
+                description: """
+                The value determines if mixer should synchronize buffers based on pts values.
+                """,
+                default: false
               ]
 
   def_output_pad :output,
@@ -105,11 +113,13 @@ defmodule Membrane.AudioMixer do
 
   @impl true
   def handle_pad_added(pad, _context, state) do
+    stream_started = not state.use_timestamps
+
     state =
-      Bunch.Access.put_in(
+      put_in(
         state,
         [:pads, pad],
-        %{queue: <<>>, stream_ended: false}
+        %{queue: <<>>, stream_ended?: false, stream_started?: stream_started, offset: 0}
       )
 
     {:ok, state}
@@ -161,31 +171,30 @@ defmodule Membrane.AudioMixer do
   @impl true
   def handle_start_of_stream(pad, context, state) do
     offset = context.pads[pad].options.offset
-    silence = RawAudio.silence(state.caps, offset)
+    silence = if state.use_timestamps, do: <<>>, else: RawAudio.silence(state.caps, offset)
 
     state =
-      Bunch.Access.update_in(
+      update_in(
         state,
         [:pads, pad],
-        &%{&1 | queue: silence}
+        &%{&1 | queue: silence, offset: offset}
       )
 
-    {actions, state} = mix_and_get_actions(state)
-    {{:ok, actions ++ [{:redemand, :output}]}, state}
+    {{:ok, redemand: :output}, state}
   end
 
   @impl true
   def handle_end_of_stream(pad, _context, state) do
     state =
-      case Bunch.Access.get_in(state, [:pads, pad]) do
+      case get_in(state, [:pads, pad]) do
         %{queue: <<>>} ->
           Bunch.Access.delete_in(state, [:pads, pad])
 
         _state ->
-          Bunch.Access.update_in(
+          update_in(
             state,
             [:pads, pad],
-            &%{&1 | stream_ended: true}
+            &%{&1 | stream_ended?: true}
           )
       end
 
@@ -208,10 +217,47 @@ defmodule Membrane.AudioMixer do
   @impl true
   def handle_process(
         pad_ref,
-        %Buffer{payload: payload},
+        buffer,
         _context,
-        %{caps: caps, pads: pads} = state
+        state
       ) do
+    started? = get_in(state, [:pads, pad_ref, :stream_started?])
+    do_handle_process(pad_ref, buffer, started?, state)
+  end
+
+  defp do_handle_process(
+         pad_ref,
+         %Buffer{payload: payload, pts: pts},
+         false,
+         %{caps: caps, pads: pads, current_time: current_time} = state
+       ) do
+    offset = get_in(pads, [pad_ref, :offset])
+    buffer_ts = pts + offset
+
+    state =
+      if buffer_ts >= current_time do
+        diff = buffer_ts - current_time
+        silence = RawAudio.silence(caps, diff)
+
+        update_in(
+          state,
+          [:pads, pad_ref],
+          &%{&1 | queue: silence <> payload}
+        )
+        |> put_in([:pads, pad_ref, :stream_started?], true)
+      else
+        state
+      end
+
+    {{:ok, redemand: :output}, state}
+  end
+
+  defp do_handle_process(
+         pad_ref,
+         %Buffer{payload: payload},
+         _started?,
+         %{caps: caps, pads: pads} = state
+       ) do
     time_frame = RawAudio.frame_size(caps)
 
     {size, pads} =
@@ -350,14 +396,14 @@ defmodule Membrane.AudioMixer do
 
   defp all_streams_ended?(%{pads: pads}) do
     pads
-    |> Enum.map(fn {_pad, %{stream_ended: stream_ended}} -> stream_ended end)
+    |> Enum.map(fn {_pad, %{stream_ended?: stream_ended?}} -> stream_ended? end)
     |> Enum.all?()
   end
 
   defp remove_finished_pads(pads, time_frame) do
     pads
     |> Enum.flat_map(fn
-      {_pad, %{queue: queue, stream_ended: true}} when byte_size(queue) < time_frame -> []
+      {_pad, %{queue: queue, stream_ended?: true}} when byte_size(queue) < time_frame -> []
       pad_data -> [pad_data]
     end)
     |> Map.new()
