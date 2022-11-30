@@ -69,11 +69,14 @@ defmodule Membrane.AudioMixer do
                 """,
                 default: false
               ],
-              use_timestamps: [
+              synchronize_buffers?: [
                 type: :boolean,
                 spec: boolean(),
                 description: """
                 The value determines if mixer should synchronize buffers based on pts values.
+                - If true, mixer will synchronize buffers based on its pts values. If buffer pts value is lower then the current mixing time
+                it will be dropped.
+                - If false, mixer will take all incoming buffers no matter what pts they have and put it in the queue.
                 """,
                 default: false
               ]
@@ -90,7 +93,7 @@ defmodule Membrane.AudioMixer do
     caps: @supported_caps,
     options: [
       offset: [
-        spec: Time.t(),
+        spec: Time.non_neg_t(),
         default: 0,
         description: "Offset of the input audio at the pad."
       ]
@@ -112,14 +115,20 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_pad_added(pad, _context, state) do
-    stream_started = not state.use_timestamps
+  def handle_pad_added(pad, context, state) do
+    offset = context.pads[pad].options.offset
+
+    if offset < 0,
+      do:
+        raise(
+          "Wrong offset value: #{offset}, audio mixer only allows offset value to be non negative."
+        )
 
     state =
       put_in(
         state,
         [:pads, pad],
-        %{queue: <<>>, stream_ended?: false, stream_started?: stream_started, offset: 0}
+        %{queue: <<>>}
       )
 
     {:ok, state}
@@ -171,36 +180,32 @@ defmodule Membrane.AudioMixer do
   @impl true
   def handle_start_of_stream(pad, context, state) do
     offset = context.pads[pad].options.offset
-    silence = if state.use_timestamps, do: <<>>, else: RawAudio.silence(state.caps, offset)
+    silence = if state.synchronize_buffers?, do: <<>>, else: RawAudio.silence(state.caps, offset)
 
     state =
-      update_in(
+      put_in(
         state,
         [:pads, pad],
-        &%{&1 | queue: silence, offset: offset}
+        %{queue: silence, offset: offset}
       )
 
     {{:ok, redemand: :output}, state}
   end
 
   @impl true
-  def handle_end_of_stream(pad, _context, state) do
+  def handle_end_of_stream(pad, context, state) do
     state =
       case get_in(state, [:pads, pad]) do
         %{queue: <<>>} ->
           Bunch.Access.delete_in(state, [:pads, pad])
 
         _state ->
-          update_in(
-            state,
-            [:pads, pad],
-            &%{&1 | stream_ended?: true}
-          )
+          state
       end
 
-    {actions, state} = mix_and_get_actions(state)
+    {actions, state} = mix_and_get_actions(context, state)
 
-    if all_streams_ended?(state) do
+    if all_streams_ended?(context) do
       {{:ok, actions ++ [{:end_of_stream, :output}]}, state}
     else
       {{:ok, actions}, state}
@@ -218,17 +223,20 @@ defmodule Membrane.AudioMixer do
   def handle_process(
         pad_ref,
         buffer,
-        _context,
+        context,
         state
       ) do
-    started? = get_in(state, [:pads, pad_ref, :stream_started?])
-    do_handle_process(pad_ref, buffer, started?, state)
+    empty_queue? = get_in(state, [:pads, pad_ref, :queue]) == <<>>
+    started? = not empty_queue? || not state.synchronize_buffers?
+
+    do_handle_process(pad_ref, buffer, started?, context, state)
   end
 
   defp do_handle_process(
          pad_ref,
          %Buffer{payload: payload, pts: pts},
          false,
+         _context,
          %{caps: caps, pads: pads, current_time: current_time} = state
        ) do
     offset = get_in(pads, [pad_ref, :offset])
@@ -244,7 +252,6 @@ defmodule Membrane.AudioMixer do
           [:pads, pad_ref],
           &%{&1 | queue: silence <> payload}
         )
-        |> put_in([:pads, pad_ref, :stream_started?], true)
       else
         state
       end
@@ -256,6 +263,7 @@ defmodule Membrane.AudioMixer do
          pad_ref,
          %Buffer{payload: payload},
          _started?,
+         context,
          %{caps: caps, pads: pads} = state
        ) do
     time_frame = RawAudio.frame_size(caps)
@@ -270,7 +278,7 @@ defmodule Membrane.AudioMixer do
       )
 
     if size >= time_frame do
-      {actions, state} = mix_and_get_actions(%{state | pads: pads})
+      {actions, state} = mix_and_get_actions(context, %{state | pads: pads})
       actions = if actions == [], do: [redemand: :output], else: actions
       {{:ok, actions}, state}
     else
@@ -339,14 +347,14 @@ defmodule Membrane.AudioMixer do
     |> then(fn demands -> {{:ok, demands}, state} end)
   end
 
-  defp mix_and_get_actions(%{caps: caps, pads: pads} = state) do
+  defp mix_and_get_actions(context, %{caps: caps, pads: pads} = state) do
     time_frame = RawAudio.frame_size(caps)
     mix_size = get_mix_size(pads, time_frame)
 
     {payload, state} =
       if mix_size >= time_frame do
         {payload, pads, state} = mix(pads, mix_size, state)
-        pads = remove_finished_pads(pads, time_frame)
+        pads = remove_finished_pads(context, pads, time_frame)
         state = %{state | pads: pads}
 
         {payload, state}
@@ -355,7 +363,7 @@ defmodule Membrane.AudioMixer do
       end
 
     {payload, state} =
-      if all_streams_ended?(state) do
+      if all_streams_ended?(context) do
         {flushed, state} = flush_mixer(state)
         {payload <> flushed, state}
       else
@@ -396,17 +404,21 @@ defmodule Membrane.AudioMixer do
 
   defp all_streams_ended?(%{pads: pads}) do
     pads
-    |> Enum.map(fn {_pad, %{stream_ended?: stream_ended?}} -> stream_ended? end)
+    |> Enum.filter(fn {pad_name, _info} -> pad_name != :output end)
+    |> Enum.map(fn {_pad, %{end_of_stream?: end_of_stream?}} -> end_of_stream? end)
     |> Enum.all?()
   end
 
-  defp remove_finished_pads(pads, time_frame) do
+  defp remove_finished_pads(context, pads, time_frame) do
     pads
-    |> Enum.flat_map(fn
-      {_pad, %{queue: queue, stream_ended?: true}} when byte_size(queue) < time_frame -> []
-      pad_data -> [pad_data]
-    end)
+    |> Enum.flat_map(&maybe_remove_pad(time_frame, context, &1))
     |> Map.new()
+  end
+
+  defp maybe_remove_pad(time_frame, context, {pad, %{queue: queue}} = pad_data) do
+    end_of_stream = Map.get(context.pads, pad).end_of_stream?
+    to_short_to_mix = byte_size(queue) < time_frame
+    if end_of_stream and to_short_to_mix, do: [], else: [pad_data]
   end
 
   defp mix_payloads(payloads, %{mixer_state: %module{} = mixer_state} = state) do
