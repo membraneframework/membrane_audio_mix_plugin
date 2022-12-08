@@ -109,6 +109,8 @@ defmodule Membrane.AudioMixer do
         |> Map.from_struct()
         |> Map.put(:pads, %{})
         |> Map.put(:mixer_state, initialize_mixer_state(caps, options))
+        # last_timestamp represents latest mixed audio timestamp that was sent
+        |> Map.put(:last_timestamp, 0)
 
       {:ok, state}
     end
@@ -128,7 +130,7 @@ defmodule Membrane.AudioMixer do
       put_in(
         state,
         [:pads, pad],
-        %{queue: <<>>}
+        %{queue: <<>>, ready_to_mix?: false}
       )
 
     {:ok, state}
@@ -182,11 +184,15 @@ defmodule Membrane.AudioMixer do
     offset = context.pads[pad].options.offset
     silence = if state.synchronize_buffers?, do: <<>>, else: RawAudio.silence(state.caps, offset)
 
+    # In case of synchronization buffers we have to wait for buffer with pts
+    # equal or greater then mixer last timestamp. Only then mixer can properly mix all tracks
+    ready_to_mix? = not state.synchronize_buffers?
+
     state =
       put_in(
         state,
         [:pads, pad],
-        %{queue: silence, offset: offset}
+        %{queue: silence, offset: offset, ready_to_mix?: ready_to_mix?}
       )
 
     {{:ok, redemand: :output}, state}
@@ -226,10 +232,8 @@ defmodule Membrane.AudioMixer do
         context,
         state
       ) do
-    empty_queue? = get_in(state, [:pads, pad_ref, :queue]) == <<>>
-    started? = not empty_queue? || not state.synchronize_buffers?
-
-    do_handle_process(pad_ref, buffer, started?, context, state)
+    ready_to_mix? = get_in(state.pads, [pad_ref, :ready_to_mix?])
+    do_handle_process(pad_ref, buffer, ready_to_mix?, context, state)
   end
 
   defp do_handle_process(
@@ -237,20 +241,20 @@ defmodule Membrane.AudioMixer do
          %Buffer{payload: payload, pts: pts},
          false,
          _context,
-         %{caps: caps, pads: pads, current_time: current_time} = state
+         %{caps: caps, pads: pads, last_timestamp: last_timestamp} = state
        ) do
     offset = get_in(pads, [pad_ref, :offset])
     buffer_ts = pts + offset
 
     state =
-      if buffer_ts >= current_time do
-        diff = buffer_ts - current_time
+      if buffer_ts >= last_timestamp do
+        diff = buffer_ts - last_timestamp
         silence = RawAudio.silence(caps, diff)
 
         update_in(
           state,
           [:pads, pad_ref],
-          &%{&1 | queue: silence <> payload}
+          &%{&1 | queue: silence <> payload, ready_to_mix?: true}
         )
       else
         state
@@ -262,7 +266,7 @@ defmodule Membrane.AudioMixer do
   defp do_handle_process(
          pad_ref,
          %Buffer{payload: payload},
-         _started?,
+         true,
          context,
          %{caps: caps, pads: pads} = state
        ) do
@@ -355,7 +359,8 @@ defmodule Membrane.AudioMixer do
       if mix_size >= time_frame do
         {payload, pads, state} = mix(pads, mix_size, state)
         pads = remove_finished_pads(context, pads, time_frame)
-        state = %{state | pads: pads}
+        mix_time = RawAudio.bytes_to_time(mix_size, caps)
+        state = %{state | pads: pads, last_timestamp: state.last_timestamp + mix_time}
 
         {payload, state}
       else
