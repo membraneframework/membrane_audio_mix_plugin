@@ -19,8 +19,8 @@ defmodule Membrane.AudioMixer do
 
   alias Membrane.AudioMixer.{Adder, ClipPreventingAdder, NativeAdder}
   alias Membrane.Buffer
-  alias Membrane.RawAudio
   alias Membrane.Caps.Matcher
+  alias Membrane.RawAudio
   alias Membrane.Time
 
   @supported_caps [
@@ -74,8 +74,8 @@ defmodule Membrane.AudioMixer do
                 spec: boolean(),
                 description: """
                 The value determines if mixer should synchronize buffers based on pts values.
-                - If true, mixer will synchronize buffers based on its pts values. If buffer pts value is lower then the current mixing time
-                it will be dropped.
+                - If true, mixer will synchronize buffers based on its pts values. If buffer pts value is lower then the current
+                mixing time (last_ts_sent) it will be dropped.
                 - If false, mixer will take all incoming buffers no matter what pts they have and put it in the queue.
                 """,
                 default: false
@@ -109,6 +109,7 @@ defmodule Membrane.AudioMixer do
         |> Map.from_struct()
         |> Map.put(:pads, %{})
         |> Map.put(:mixer_state, initialize_mixer_state(caps, options))
+        |> Map.put(:last_ts_sent, 0)
 
       {:ok, state}
     end
@@ -128,7 +129,7 @@ defmodule Membrane.AudioMixer do
       put_in(
         state,
         [:pads, pad],
-        %{queue: <<>>}
+        %{queue: <<>>, ready_to_mix?: false}
       )
 
     {:ok, state}
@@ -181,12 +182,13 @@ defmodule Membrane.AudioMixer do
   def handle_start_of_stream(pad, context, state) do
     offset = context.pads[pad].options.offset
     silence = if state.synchronize_buffers?, do: <<>>, else: RawAudio.silence(state.caps, offset)
+    ready_to_mix? = not state.synchronize_buffers?
 
     state =
       put_in(
         state,
         [:pads, pad],
-        %{queue: silence, offset: offset}
+        %{queue: silence, offset: offset, ready_to_mix?: ready_to_mix?}
       )
 
     {{:ok, redemand: :output}, state}
@@ -226,10 +228,8 @@ defmodule Membrane.AudioMixer do
         context,
         state
       ) do
-    empty_queue? = get_in(state, [:pads, pad_ref, :queue]) == <<>>
-    started? = not empty_queue? || not state.synchronize_buffers?
-
-    do_handle_process(pad_ref, buffer, started?, context, state)
+    ready_to_mix? = get_in(state.pads, [pad_ref, :ready_to_mix?])
+    do_handle_process(pad_ref, buffer, ready_to_mix?, context, state)
   end
 
   defp do_handle_process(
@@ -237,20 +237,20 @@ defmodule Membrane.AudioMixer do
          %Buffer{payload: payload, pts: pts},
          false,
          _context,
-         %{caps: caps, pads: pads, current_time: current_time} = state
+         %{caps: caps, pads: pads, last_ts_sent: last_ts_sent} = state
        ) do
     offset = get_in(pads, [pad_ref, :offset])
     buffer_ts = pts + offset
 
     state =
-      if buffer_ts >= current_time do
-        diff = buffer_ts - current_time
+      if buffer_ts >= last_ts_sent do
+        diff = buffer_ts - last_ts_sent
         silence = RawAudio.silence(caps, diff)
 
         update_in(
           state,
           [:pads, pad_ref],
-          &%{&1 | queue: silence <> payload}
+          &%{&1 | queue: silence <> payload, ready_to_mix?: true}
         )
       else
         state
@@ -262,7 +262,7 @@ defmodule Membrane.AudioMixer do
   defp do_handle_process(
          pad_ref,
          %Buffer{payload: payload},
-         _started?,
+         true,
          context,
          %{caps: caps, pads: pads} = state
        ) do
@@ -355,7 +355,8 @@ defmodule Membrane.AudioMixer do
       if mix_size >= time_frame do
         {payload, pads, state} = mix(pads, mix_size, state)
         pads = remove_finished_pads(context, pads, time_frame)
-        state = %{state | pads: pads}
+        mix_time = RawAudio.bytes_to_time(mix_size, caps)
+        state = %{state | pads: pads, last_ts_sent: state.last_ts_sent + mix_time}
 
         {payload, state}
       else
