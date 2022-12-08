@@ -18,8 +18,8 @@ defmodule Membrane.AudioMixer.NativeAdder do
 
   @behaviour Membrane.AudioMixer.Mixer
 
-  alias Membrane.RawAudio
   alias Membrane.AudioMixer.Mixer.Native
+  alias Membrane.RawAudio
 
   @enforce_keys [:mixer_ref]
   defstruct @enforce_keys
