@@ -236,7 +236,7 @@ defmodule Membrane.AudioMixer do
          pad_ref,
          %Buffer{payload: payload, pts: pts},
          false,
-         _context,
+         context,
          %{caps: caps, pads: pads, last_ts_sent: last_ts_sent} = state
        ) do
     offset = get_in(pads, [pad_ref, :offset])
@@ -256,7 +256,16 @@ defmodule Membrane.AudioMixer do
         state
       end
 
-    {{:ok, redemand: :output}, state}
+    time_frame = RawAudio.frame_size(caps)
+    size = byte_size(get_in(state, [:pads, pad_ref, :queue]))
+
+    if size >= time_frame do
+      {actions, state} = mix_and_get_actions(context, state)
+      actions = if actions == [], do: [redemand: :output], else: actions
+      {{:ok, actions}, state}
+    else
+      {{:ok, redemand: :output}, state}
+    end
   end
 
   defp do_handle_process(
