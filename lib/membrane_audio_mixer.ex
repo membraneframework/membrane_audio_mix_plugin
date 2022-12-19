@@ -256,16 +256,10 @@ defmodule Membrane.AudioMixer do
         state
       end
 
-    time_frame = RawAudio.frame_size(caps)
     size = byte_size(get_in(state, [:pads, pad_ref, :queue]))
+    time_frame = RawAudio.frame_size(caps)
 
-    if size >= time_frame do
-      {actions, state} = mix_and_get_actions(context, state)
-      actions = if actions == [], do: [redemand: :output], else: actions
-      {{:ok, actions}, state}
-    else
-      {{:ok, redemand: :output}, state}
-    end
+    mix_or_redemand(size, time_frame, context, state)
   end
 
   defp do_handle_process(
@@ -275,8 +269,6 @@ defmodule Membrane.AudioMixer do
          context,
          %{caps: caps, pads: pads} = state
        ) do
-    time_frame = RawAudio.frame_size(caps)
-
     {size, pads} =
       Map.get_and_update(
         pads,
@@ -286,13 +278,8 @@ defmodule Membrane.AudioMixer do
         end
       )
 
-    if size >= time_frame do
-      {actions, state} = mix_and_get_actions(context, %{state | pads: pads})
-      actions = if actions == [], do: [redemand: :output], else: actions
-      {{:ok, actions}, state}
-    else
-      {{:ok, redemand: :output}, %{state | pads: pads}}
-    end
+    time_frame = RawAudio.frame_size(caps)
+    mix_or_redemand(size, time_frame, context, %{state | pads: pads})
   end
 
   @impl true
@@ -331,6 +318,16 @@ defmodule Membrane.AudioMixer do
       RuntimeError,
       "received invalid caps on pad #{inspect(pad)}, expected: #{inspect(state.caps)}, got: #{inspect(caps)}"
     )
+  end
+
+  defp mix_or_redemand(size, time_frame, context, state) do
+    if size >= time_frame do
+      {actions, state} = mix_and_get_actions(context, state)
+      actions = if actions == [], do: [redemand: :output], else: actions
+      {{:ok, actions}, state}
+    else
+      {{:ok, redemand: :output}, state}
+    end
   end
 
   defp initialize_mixer_state(nil, _state), do: nil
