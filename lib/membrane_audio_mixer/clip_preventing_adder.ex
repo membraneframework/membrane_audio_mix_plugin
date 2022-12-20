@@ -58,8 +58,13 @@ defmodule Membrane.AudioMixer.ClipPreventingAdder do
     {values, rest} = Enum.split_while(values, split_fun)
 
     if !is_last_wave && rest == [] do
-      state = %__MODULE__{state | queue: state.queue ++ values}
-      {buffer, state}
+      if Enum.all?(values, fn value -> value == 0 end) do
+        {Enum.map(values, &RawAudio.value_to_sample(&1, state.caps)) |> IO.iodata_to_binary(),
+         state}
+      else
+        state = %__MODULE__{state | queue: state.queue ++ values}
+        {buffer, state}
+      end
     else
       buffer = [buffer | get_iodata(values, state)] |> IO.iodata_to_binary()
 
