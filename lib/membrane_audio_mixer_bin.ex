@@ -20,11 +20,10 @@ defmodule Membrane.AudioMixerBin do
 
   require Membrane.Logger
 
-  alias Membrane.{AudioMixer, ParentSpec, RawAudio}
+  alias Membrane.{AudioMixer, RawAudio}
   alias Membrane.Bin.PadData
-  alias Membrane.Caps.Matcher
 
-  # @supported_caps [
+  # @supported_stream_formats [
   #   {RawAudio,
   #    sample_format: Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])},
   #   Membrane.RemoteStream
@@ -70,7 +69,7 @@ defmodule Membrane.AudioMixerBin do
     accepted_format: RawAudio
 
   @impl true
-  def handle_init(options) do
+  def handle_init(_ctx, options) do
     state = options |> Map.from_struct()
 
     {[], state}
@@ -90,7 +89,7 @@ defmodule Membrane.AudioMixerBin do
   end
 
   @impl true
-  def handle_other(:done, ctx, state) do
+  def handle_info(:done, ctx, state) do
     input_pads =
       ctx.pads
       |> Map.values()

@@ -33,12 +33,12 @@ defmodule Membrane.AudioMixerTest do
         input_paths
         |> Enum.with_index(1)
         |> Enum.map(fn {path, index} ->
-          {String.to_atom("file_src_#{index}"), %Membrane.File.Source{location: path}}
+          child({:file_src, index}, %Membrane.File.Source{location: path})
         end)
-        |> Enum.concat(file_sink: %Membrane.File.Sink{location: output_path})
+        |> Enum.concat([child(:file_sink, %Membrane.File.Sink{location: output_path})])
 
       mixer = %Membrane.AudioMixer{
-        caps: %RawAudio{
+        stream_format: %RawAudio{
           channels: 1,
           sample_rate: 16_000,
           sample_format: audio_format
@@ -49,8 +49,11 @@ defmodule Membrane.AudioMixerTest do
       preventer_mixer = %Membrane.AudioMixer{mixer | prevent_clipping: true}
       native_mixer = %Membrane.AudioMixer{preventer_mixer | native_mixer: true}
 
-      {base_elements ++ [mixer: mixer], base_elements ++ [mixer: preventer_mixer],
-       base_elements ++ [mixer: native_mixer]}
+      {
+        base_elements ++ [child(:mixer, mixer)],
+        base_elements ++ [child(:mixer, preventer_mixer)],
+        base_elements ++ [child(:mixer, native_mixer)]
+      }
     end
 
     defp perform_test(
@@ -60,17 +63,15 @@ defmodule Membrane.AudioMixerTest do
            preventer_reference,
            output_path
          ) do
-      do_perform_test(clipper_elements, links, clipper_reference, output_path)
-      do_perform_test(preventer_elements, links, preventer_reference, output_path)
-      do_perform_test(native_elements, links, preventer_reference, output_path)
+      do_perform_test(clipper_elements ++ links, clipper_reference, output_path)
+      do_perform_test(preventer_elements ++ links, preventer_reference, output_path)
+      do_perform_test(native_elements ++ links, preventer_reference, output_path)
     end
 
-    defp do_perform_test(elements, links, reference_path, output_path) do
-      pipeline_options = %Pipeline.Options{elements: elements, links: links}
-      assert {:ok, pid} = Pipeline.start_link(pipeline_options)
+    defp do_perform_test(structure, reference_path, output_path) do
+      assert pipeline = Pipeline.start_link_supervised!(structure: structure)
 
-      assert_end_of_stream(pid, :file_sink, :input, 5_000)
-      Pipeline.terminate(pid, blocking?: true)
+      assert_end_of_stream(pipeline, :file_sink, :input, 5_000)
 
       assert {:ok, reference_file} = File.read(reference_path)
       assert {:ok, output_file} = File.read(output_path)
@@ -85,11 +86,11 @@ defmodule Membrane.AudioMixerTest do
       elements = create_elements([@input_path_1, @input_path_1], output_path)
 
       links = [
-        link(:file_src_1)
-        |> to(:mixer)
-        |> to(:file_sink),
-        link(:file_src_2)
-        |> to(:mixer)
+        get_child({:file_src, 1})
+        |> get_child(:mixer)
+        |> get_child(:file_sink),
+        get_child({:file_src, 2})
+        |> get_child(:mixer)
       ]
 
       perform_test(elements, links, reference_path, preventer_reference_path, output_path)
@@ -102,11 +103,11 @@ defmodule Membrane.AudioMixerTest do
       elements = create_elements([@input_path_1, @input_path_2], output_path)
 
       links = [
-        link(:file_src_1)
-        |> to(:mixer)
-        |> to(:file_sink),
-        link(:file_src_2)
-        |> to(:mixer)
+        get_child({:file_src, 1})
+        |> get_child(:mixer)
+        |> get_child(:file_sink),
+        get_child({:file_src, 2})
+        |> get_child(:mixer)
       ]
 
       perform_test(elements, links, reference_path, reference_path, output_path)
@@ -119,12 +120,12 @@ defmodule Membrane.AudioMixerTest do
       elements = create_elements([@input_path_1, @input_path_2], output_path)
 
       links = [
-        link(:file_src_1)
+        get_child({:file_src, 1})
         |> via_in(:input, options: [offset: Membrane.Time.microseconds(125)])
-        |> to(:mixer)
-        |> to(:file_sink),
-        link(:file_src_2)
-        |> to(:mixer)
+        |> get_child(:mixer)
+        |> get_child(:file_sink),
+        get_child({:file_src, 2})
+        |> get_child(:mixer)
       ]
 
       perform_test(elements, links, reference_path, reference_path, output_path)
@@ -137,12 +138,12 @@ defmodule Membrane.AudioMixerTest do
       elements = create_elements([@input_path_1, @input_path_2], output_path)
 
       links = [
-        link(:file_src_1)
-        |> to(:mixer)
-        |> to(:file_sink),
-        link(:file_src_2)
+        get_child({:file_src, 1})
+        |> get_child(:mixer)
+        |> get_child(:file_sink),
+        get_child({:file_src, 2})
         |> via_in(:input, options: [offset: Membrane.Time.microseconds(250)])
-        |> to(:mixer)
+        |> get_child(:mixer)
       ]
 
       perform_test(elements, links, reference_path, reference_path, output_path)
@@ -155,13 +156,13 @@ defmodule Membrane.AudioMixerTest do
       elements = create_elements([@input_path_1, @input_path_2], output_path)
 
       links = [
-        link(:file_src_1)
+        get_child({:file_src, 1})
         |> via_in(:input, options: [offset: Membrane.Time.microseconds(500)])
-        |> to(:mixer)
-        |> to(:file_sink),
-        link(:file_src_2)
+        |> get_child(:mixer)
+        |> get_child(:file_sink),
+        get_child({:file_src, 2})
         |> via_in(:input, options: [offset: Membrane.Time.microseconds(125)])
-        |> to(:mixer)
+        |> get_child(:mixer)
       ]
 
       perform_test(elements, links, reference_path, reference_path, output_path)
@@ -174,80 +175,81 @@ defmodule Membrane.AudioMixerTest do
       elements = create_elements([@input_path_1, @input_path_1, @input_path_2], output_path)
 
       links = [
-        link(:file_src_1)
-        |> to(:mixer)
-        |> to(:file_sink),
-        link(:file_src_2)
+        get_child({:file_src, 1})
+        |> get_child(:mixer)
+        |> get_child(:file_sink),
+        get_child({:file_src, 2})
         |> via_in(:input, options: [offset: Membrane.Time.microseconds(250)])
-        |> to(:mixer),
-        link(:file_src_3)
+        |> get_child(:mixer),
+        get_child({:file_src, 3})
         |> via_in(:input, options: [offset: Membrane.Time.microseconds(125)])
-        |> to(:mixer)
+        |> get_child(:mixer)
       ]
 
       perform_test(elements, links, reference_path, reference_path, output_path)
     end
   end
 
-  describe "Audio Mixer should handle received caps" do
-    defp create_elements_with_decoders(output_path, caps \\ nil) do
-      case caps do
-        nil ->
-          [mixer: Membrane.AudioMixer]
+  describe "Audio Mixer should handle received stream format" do
+    defp create_elements_with_decoders(output_path, stream_format \\ nil) do
+      mixer =
+        case stream_format do
+          nil ->
+            Membrane.AudioMixer
 
-        _caps ->
-          [mixer: %Membrane.AudioMixer{caps: caps}]
-      end
-      |> Enum.concat(
-        file_src_1: %Membrane.File.Source{location: @input_path_mp3},
-        file_src_2: %Membrane.File.Source{location: @input_path_mp3},
-        decoder_1: Membrane.MP3.MAD.Decoder,
-        decoder_2: Membrane.MP3.MAD.Decoder,
-        file_sink: %Membrane.File.Sink{location: output_path}
-      )
+          _stream_format ->
+            %Membrane.AudioMixer{stream_format: stream_format}
+        end
+
+      [
+        child(:mixer, mixer),
+        child({:file_src, 1}, %Membrane.File.Source{location: @input_path_mp3}),
+        child({:file_src, 2}, %Membrane.File.Source{location: @input_path_mp3}),
+        child({:decoder, 1}, Membrane.MP3.MAD.Decoder),
+        child({:decoder, 2}, Membrane.MP3.MAD.Decoder),
+        child(:file_sink, %Membrane.File.Sink{location: output_path})
+      ]
     end
 
     defp create_links() do
       [
-        link(:file_src_1)
-        |> to(:decoder_1)
-        |> to(:mixer)
-        |> to(:file_sink),
-        link(:file_src_2)
-        |> to(:decoder_2)
-        |> to(:mixer)
+        get_child({:file_src, 1})
+        |> get_child({:decoder, 1})
+        |> get_child(:mixer)
+        |> get_child(:file_sink),
+        get_child({:file_src, 2})
+        |> get_child({:decoder, 2})
+        |> get_child(:mixer)
       ]
     end
 
-    defp perform_test(elements, links) do
-      pipeline_options = %Pipeline.Options{elements: elements, links: links}
-      assert {:ok, pid} = Pipeline.start_link(pipeline_options)
-      assert_end_of_stream(pid, :file_sink, :input, 5_000)
-      Pipeline.terminate(pid, blocking?: true)
+    defp perform_test(structure) do
+      assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+      assert_end_of_stream(pipeline, :file_sink, :input, 5_000)
     end
 
-    test "when they match and Mixer has its own caps" do
+    test "when they match and Mixer has its own stream format" do
       output_path = prepare_output()
 
-      caps = %RawAudio{
+      stream_format = %RawAudio{
         channels: 2,
         sample_rate: 44_100,
         sample_format: :s24le
       }
 
-      elements = create_elements_with_decoders(output_path, caps)
+      elements = create_elements_with_decoders(output_path, stream_format)
       links = create_links()
 
-      perform_test(elements, links)
+      perform_test(elements ++ links)
     end
 
-    test "when they match and Mixer does not have its own caps" do
+    test "when they match and Mixer does not have its own stream format" do
       output_path = prepare_output()
 
       elements = create_elements_with_decoders(output_path)
       links = create_links()
 
-      perform_test(elements, links)
+      perform_test(elements ++ links)
     end
   end
 end

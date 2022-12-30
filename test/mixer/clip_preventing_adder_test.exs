@@ -13,7 +13,7 @@ defmodule Membrane.AudioMixer.ClipPreventingAdderTest do
 
   defp test_for_caps(caps_contents, buffers, reference) do
     caps_contents
-    |> TestHelper.generate_caps()
+    |> TestHelper.generate_stream_formats()
     |> Enum.each(fn caps ->
       Membrane.Logger.debug("caps: #{inspect(caps)}")
       state = init(caps)
@@ -26,7 +26,7 @@ defmodule Membrane.AudioMixer.ClipPreventingAdderTest do
 
   describe "ClipPreventingAdder should just sum bytes from inputs in simple cases" do
     defp test_for_several_caps(buffers, reference) do
-      test_for_caps(TestHelper.supported_caps(), buffers, reference)
+      test_for_caps(TestHelper.supported_stream_formats(), buffers, reference)
     end
 
     test "when 2 inputs have 0 bytes" do
@@ -256,8 +256,8 @@ defmodule Membrane.AudioMixer.ClipPreventingAdderTest do
 
   describe "ClipPreventingAdder should" do
     defp test_flush_for_several_caps(queue, flushed) do
-      TestHelper.supported_caps()
-      |> TestHelper.generate_caps()
+      TestHelper.supported_stream_formats()
+      |> TestHelper.generate_stream_formats()
       |> Enum.each(fn caps ->
         payload =
           flushed |> Enum.map(&RawAudio.value_to_sample(&1, caps)) |> IO.iodata_to_binary()

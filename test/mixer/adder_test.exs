@@ -18,7 +18,7 @@ defmodule Membrane.AudioMixer.AdderTest do
 
   defp test_for_caps(caps_contents, buffers, reference) do
     caps_contents
-    |> TestHelper.generate_caps()
+    |> TestHelper.generate_stream_formats()
     |> Enum.each(fn caps ->
       state = init(caps)
       Membrane.Logger.debug("caps: #{inspect(caps)}")
@@ -28,7 +28,7 @@ defmodule Membrane.AudioMixer.AdderTest do
 
   describe "Adder should just sum bytes from inputs in simple cases" do
     defp test_for_several_caps(buffers, reference) do
-      test_for_caps(TestHelper.supported_caps(), buffers, reference)
+      test_for_caps(TestHelper.supported_stream_formats(), buffers, reference)
     end
 
     test "when 2 inputs have 0 bytes" do
@@ -238,8 +238,8 @@ defmodule Membrane.AudioMixer.AdderTest do
 
   describe "Adder should" do
     test "flush properly" do
-      TestHelper.supported_caps()
-      |> TestHelper.generate_caps()
+      TestHelper.supported_stream_formats()
+      |> TestHelper.generate_stream_formats()
       |> Enum.each(fn caps ->
         state = init(caps)
         assert flush(state) == {<<>>, state}

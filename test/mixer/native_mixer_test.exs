@@ -11,7 +11,7 @@ defmodule Membrane.AudioMixer.NativeMixerTest do
 
   defp test_for_caps(caps_contents, buffers, reference) do
     caps_contents
-    |> TestHelper.generate_caps()
+    |> TestHelper.generate_stream_formats()
     |> Enum.each(fn caps ->
       Membrane.Logger.debug("caps: #{inspect(caps)}")
       state = init(caps)
@@ -37,7 +37,7 @@ defmodule Membrane.AudioMixer.NativeMixerTest do
 
   describe "NativeAdder should just sum bytes from inputs in simple cases" do
     defp test_for_several_caps(buffers, reference) do
-      test_for_caps(TestHelper.supported_caps(), buffers, reference)
+      test_for_caps(TestHelper.supported_stream_formats(), buffers, reference)
     end
 
     test "when 2 inputs have 0 bytes" do

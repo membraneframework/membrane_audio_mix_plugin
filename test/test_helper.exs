@@ -4,8 +4,8 @@ defmodule Membrane.AudioMix.TestHelper do
   @moduledoc false
   alias Membrane.RawAudio
 
-  @spec supported_caps() :: [{integer(), integer(), atom()}]
-  def supported_caps(),
+  @spec supported_stream_formats() :: [{integer(), integer(), atom()}]
+  def supported_stream_formats(),
     do: [
       {1, 16_000, :s8},
       {1, 16_000, :s16le},
@@ -22,11 +22,11 @@ defmodule Membrane.AudioMix.TestHelper do
       {6, 16_000, :s16be}
     ]
 
-  @spec generate_caps([{integer(), integer(), atom()}]) :: [Raw.t()]
-  def generate_caps(caps_contents) do
+  @spec generate_stream_formats([{integer(), integer(), atom()}]) :: [Raw.t()]
+  def generate_stream_formats(stream_formats_contents) do
     Enum.map(
-      caps_contents,
-      fn {channels, sample_rate, format} = _caps ->
+      stream_formats_contents,
+      fn {channels, sample_rate, format} = _stream_formats ->
         %RawAudio{
           channels: channels,
           sample_rate: sample_rate,
