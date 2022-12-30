@@ -101,7 +101,7 @@ defmodule Membrane.AudioMixerBin do
   end
 
   @spec gen_mixing_spec([PadData.t()], pos_integer(), AudioMixer.t()) ::
-          Membrane.ChildrenSpec.child_definition_t()
+          Membrane.ChildrenSpec.t()
   def gen_mixing_spec([single_input_data], _max_degree, mixer_options) do
     offset = single_input_data.options.offset
 
@@ -124,7 +124,7 @@ defmodule Membrane.AudioMixerBin do
     # levels will be 0-indexed with tree root being level 0
     leaves_level = levels - 1
 
-    # links generator to be used only for botttom level of mixing tree
+    # links generator to be used only for bottom level of mixing tree
     links_generator = fn _inputs_number, nodes_num, level ->
       # inputs_number == length(inputs_data)
       inputs_data
@@ -132,13 +132,13 @@ defmodule Membrane.AudioMixerBin do
       |> Enum.map(fn {%{ref: pad_ref, options: %{offset: offset}}, i} ->
         target_node_idx = rem(i, nodes_num)
 
-        link_bin_input(pad_ref)
+        bin_input(pad_ref)
         |> via_in(:input, options: [offset: offset])
-        |> to("mixer_#{level}_#{target_node_idx}")
+        |> get_child({:mixer, {level, target_node_idx}})
       end)
     end
 
-    build_mixers_tree(leaves_level, inputs_number, [], [], consts, links_generator)
+    build_mixers_tree(leaves_level, inputs_number, [], consts, links_generator)
   end
 
   defp mid_tree_link_generator(inputs_number, level_nodes_num, level) do
@@ -146,33 +146,32 @@ defmodule Membrane.AudioMixerBin do
     |> Enum.map(fn input_index ->
       current_level_node_idx = rem(input_index, level_nodes_num)
 
-      link("mixer_#{level + 1}_#{input_index}")
-      |> to("mixer_#{level}_#{current_level_node_idx}")
+      get_child({:mixer, {level + 1, input_index}})
+      |> get_child({:mixer, {level, current_level_node_idx}})
     end)
   end
 
   defp build_mixers_tree(
          level_index,
          inputs_number,
-         elem_acc,
-         link_acc,
+         structure_acc,
          consts,
          link_generator \\ &mid_tree_link_generator/3
        )
 
-  defp build_mixers_tree(level, 1, children, link_acc, _consts, _link_generator)
+  defp build_mixers_tree(level, 1, structure_acc, _consts, _link_generator)
        when level < 0 do
-    links = [link("mixer_0_0") |> to_bin_output()] ++ link_acc
-    %ParentSpec{children: children, links: links}
+    structure_acc = [get_child({:mixer, {0, 0}}) |> bin_output()] ++ structure_acc
+    structure_acc
   end
 
-  defp build_mixers_tree(level, inputs_number, elem_acc, link_acc, consts, link_generator) do
+  defp build_mixers_tree(level, inputs_number, structure_acc, consts, link_generator) do
     nodes_num = ceil(inputs_number / consts.max_degree)
 
     children =
       0..(nodes_num - 1)//1
       |> Enum.map(fn i ->
-        {"mixer_#{level}_#{i}", consts.mixer_options}
+        child({:mixer, {level, i}}, consts.mixer_options)
       end)
 
     links = link_generator.(inputs_number, nodes_num, level)
@@ -180,8 +179,7 @@ defmodule Membrane.AudioMixerBin do
     build_mixers_tree(
       level - 1,
       nodes_num,
-      children ++ elem_acc,
-      links ++ link_acc,
+      structure_acc ++ children ++ links,
       consts
     )
   end
