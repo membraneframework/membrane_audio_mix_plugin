@@ -24,11 +24,11 @@ defmodule Membrane.AudioMixerBin do
   alias Membrane.Bin.PadData
   alias Membrane.Caps.Matcher
 
-  @supported_caps [
-    {RawAudio,
-     sample_format: Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])},
-    Membrane.RemoteStream
-  ]
+  # @supported_caps [
+  #   {RawAudio,
+  #    sample_format: Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])},
+  #   Membrane.RemoteStream
+  # ]
 
   def_options max_inputs_per_node: [
                 spec: pos_integer(),
@@ -49,7 +49,12 @@ defmodule Membrane.AudioMixerBin do
     mode: :pull,
     availability: :on_request,
     demand_unit: :bytes,
-    caps: @supported_caps,
+    accepted_format:
+      [
+        %RawAudio{sample_format: sample_format},
+        Membrane.RemoteStream
+      ]
+      when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be],
     options: [
       offset: [
         spec: Time.t(),
@@ -62,26 +67,26 @@ defmodule Membrane.AudioMixerBin do
     mode: :pull,
     demand_unit: :bytes,
     availability: :always,
-    caps: RawAudio
+    accepted_format: RawAudio
 
   @impl true
   def handle_init(options) do
     state = options |> Map.from_struct()
 
-    {:ok, state}
+    {[], state}
   end
 
   @impl true
   def handle_pad_added(_pad_ref, %{playback_state: :stopped}, state) do
-    {:ok, state}
+    {[], state}
   end
 
   def handle_pad_added(_pad_ref, %{playback_state: playback_state}, _state)
       when playback_state != :stopped do
-    raise("""
+    raise """
     All pads should be added before starting the #{__MODULE__}.
     Pad added event received in playback state #{playback_state}.
-    """)
+    """
   end
 
   @impl true
@@ -92,23 +97,18 @@ defmodule Membrane.AudioMixerBin do
       |> Enum.filter(fn %{direction: direction} -> direction == :input end)
 
     spec = gen_mixing_spec(input_pads, state.max_inputs_per_node, state.mixer_options)
-    {{:ok, spec: spec}, state}
+    {[spec: spec], state}
   end
 
   @spec gen_mixing_spec([PadData.t()], pos_integer(), AudioMixer.t()) ::
-          ParentSpec.t()
+          Membrane.ChildrenSpec.child_definition_t()
   def gen_mixing_spec([single_input_data], _max_degree, mixer_options) do
-    children = [{:mixer, mixer_options}]
     offset = single_input_data.options.offset
 
-    links = [
-      link_bin_input(single_input_data.ref)
-      |> via_in(:input, options: [offset: offset])
-      |> to(:mixer)
-      |> to_bin_output()
-    ]
-
-    %ParentSpec{links: links, children: children}
+    bin_input(single_input_data.ref)
+    |> via_in(:input, options: [offset: offset])
+    |> child(:mixer, mixer_options)
+    |> bin_output()
   end
 
   def gen_mixing_spec(inputs_data, max_degree, mixer_options) do
