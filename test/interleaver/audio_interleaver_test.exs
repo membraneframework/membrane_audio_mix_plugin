@@ -40,7 +40,7 @@ defmodule Membrane.AudioInterleaverTest do
       end)
       |> Enum.concat([
         child(:interleaver, %Membrane.AudioInterleaver{
-          input_caps: %RawAudio{
+          input_stream_format: %RawAudio{
             channels: 1,
             sample_rate: 16_000,
             sample_format: audio_format

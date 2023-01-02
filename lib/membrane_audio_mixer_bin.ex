@@ -49,11 +49,11 @@ defmodule Membrane.AudioMixerBin do
     availability: :on_request,
     demand_unit: :bytes,
     accepted_format:
-      [
-        %RawAudio{sample_format: sample_format},
+      any_of(
+        %RawAudio{sample_format: sample_format}
+        when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be],
         Membrane.RemoteStream
-      ]
-      when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be],
+      ),
     options: [
       offset: [
         spec: Time.t(),
@@ -76,20 +76,20 @@ defmodule Membrane.AudioMixerBin do
   end
 
   @impl true
-  def handle_pad_added(_pad_ref, %{playback_state: :stopped}, state) do
+  def handle_pad_added(_pad_ref, %{playback: :stopped}, state) do
     {[], state}
   end
 
-  def handle_pad_added(_pad_ref, %{playback_state: playback_state}, _state)
-      when playback_state != :stopped do
+  def handle_pad_added(_pad_ref, %{playback: playback}, _state)
+      when playback != :stopped do
     raise """
     All pads should be added before starting the #{__MODULE__}.
-    Pad added event received in playback state #{playback_state}.
+    Pad added event received in playback state #{playback}.
     """
   end
 
   @impl true
-  def handle_info(:done, ctx, state) do
+  def handle_parent_notification(:done, ctx, state) do
     input_pads =
       ctx.pads
       |> Map.values()

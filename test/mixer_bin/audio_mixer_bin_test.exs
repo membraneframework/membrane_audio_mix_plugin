@@ -21,7 +21,7 @@ defmodule Membrane.AudioMixerBinTest do
     end
 
     @impl true
-    def handle_info({:continue, name}, _ctx, state) do
+    def handle_child_notification({:continue, name}, _element, _ctx, state) do
       {[forward: {name, :done}], state}
     end
   end
@@ -92,7 +92,7 @@ defmodule Membrane.AudioMixerBinTest do
 
       mixer_bin_pipeline = [
         module: BinTestPipeline,
-        custom_args: %{spec: structure_bin}
+        custom_args: %{spec: structure_bin, bin_name: :mixer}
       ]
 
       {

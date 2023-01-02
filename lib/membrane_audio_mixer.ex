@@ -90,11 +90,12 @@ defmodule Membrane.AudioMixer do
     availability: :on_request,
     demand_unit: :bytes,
     accepted_format:
-      [
-        %RawAudio{sample_format: sample_format},
+      any_of(
+        %RawAudio{sample_format: sample_format}
+        when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be],
         Membrane.RemoteStream
-      ]
-      when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be],
+      ),
+    #
     options: [
       offset: [
         spec: Time.non_neg_t(),

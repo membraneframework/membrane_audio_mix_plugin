@@ -1,7 +1,7 @@
 defmodule Membrane.AudioInterleaver do
   @moduledoc """
   Element responsible for interleaving several mono audio streams into single interleaved stream.
-  All input streams should be in the same raw audio format, defined by `input_caps` option.
+  All input streams should be in the same raw audio format, defined by `input_stream_format` option.
 
   Channels are interleaved in order given in `order` option - currently required, no default available.
 
@@ -17,7 +17,7 @@ defmodule Membrane.AudioInterleaver do
   alias Membrane.Buffer
   alias Membrane.RawAudio
 
-  def_options input_caps: [
+  def_options input_stream_format: [
                 type: :struct,
                 spec: RawAudio.t(),
                 description: """
@@ -52,7 +52,7 @@ defmodule Membrane.AudioInterleaver do
     mode: :pull,
     availability: :on_request,
     demand_unit: :bytes,
-    accepted_format: [%RawAudio{channels: 1}, Membrane.RemoteStream],
+    accepted_format: any_of(%RawAudio{channels: 1}, Membrane.RemoteStream),
     options: [
       offset: [
         spec: Time.t(),
@@ -75,15 +75,15 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
-  def handle_pad_added(pad, %{playback_state: :stopped}, state) do
+  def handle_pad_added(pad, %{playback: :stopped}, state) do
     state = put_in(state, [:pads, pad], %{queue: <<>>, stream_ended: false})
     {[], state}
   end
 
   @impl true
-  def handle_pad_added(_pad, %{playback_state: playback_state}, _state) do
+  def handle_pad_added(_pad, %{playback: playback}, _state) do
     raise("All pads should be connected before starting the element!
-      Pad added event received in playback state #{playback_state}.")
+      Pad added event received in playback state #{playback}.")
   end
 
   @impl true
@@ -95,13 +95,13 @@ defmodule Membrane.AudioInterleaver do
   @impl true
   def handle_playing(
         _ctx,
-        %{input_caps: %RawAudio{} = input_caps, channels: channels} = state
+        %{input_stream_format: %RawAudio{} = input_stream_format, channels: channels} = state
       ) do
-    {[caps: {:output, %RawAudio{input_caps | channels: channels}}], state}
+    {[stream_format: {:output, %RawAudio{input_stream_format | channels: channels}}], state}
   end
 
   @impl true
-  def handle_playing(_ctx, %{input_caps: nil} = state) do
+  def handle_playing(_ctx, %{input_stream_format: nil} = state) do
     {[], state}
   end
 
@@ -111,7 +111,7 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
-  def handle_demand(:output, _buffers_count, :buffers, _ctx, %{input_caps: nil} = state) do
+  def handle_demand(:output, _buffers_count, :buffers, _ctx, %{input_stream_format: nil} = state) do
     {[], state}
   end
 
@@ -121,16 +121,16 @@ defmodule Membrane.AudioInterleaver do
         buffers_count,
         :buffers,
         _ctx,
-        %{frames_per_buffer: frames, input_caps: input_caps} = state
+        %{frames_per_buffer: frames, input_stream_format: input_stream_format} = state
       ) do
-    size = buffers_count * RawAudio.frames_to_bytes(frames, input_caps)
+    size = buffers_count * RawAudio.frames_to_bytes(frames, input_stream_format)
     do_handle_demand(size, state)
   end
 
   @impl true
   def handle_start_of_stream(pad, context, state) do
     offset = context.pads[pad].options.offset
-    silence = RawAudio.silence(state.input_caps, offset)
+    silence = RawAudio.silence(state.input_stream_format, offset)
 
     state =
       Bunch.Access.update_in(
@@ -175,11 +175,11 @@ defmodule Membrane.AudioInterleaver do
         pad,
         %Buffer{payload: payload},
         _ctx,
-        %{input_caps: input_caps} = state
+        %{input_stream_format: input_stream_format} = state
       ) do
     {new_queue_size, state} = enqueue_payload(payload, pad, state)
 
-    if new_queue_size >= RawAudio.sample_size(input_caps) do
+    if new_queue_size >= RawAudio.sample_size(input_stream_format) do
       {buffer, state} = interleave(state, min_open_queue_size(state.pads))
       {[buffer: buffer], state}
     else
@@ -188,37 +188,45 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
-  def handle_caps(_pad, input_caps, _ctx, %{input_caps: nil} = state) do
-    state = %{state | input_caps: input_caps}
+  def handle_stream_format(_pad, input_stream_format, _ctx, %{input_stream_format: nil} = state) do
+    state = %{state | input_stream_format: input_stream_format}
 
-    {[caps: {:output, %{input_caps | channels: state.channels}}, redemand: :output], state}
+    {[
+       stream_format: {:output, %{input_stream_format | channels: state.channels}},
+       redemand: :output
+     ], state}
   end
 
   @impl true
-  def handle_caps(
+  def handle_stream_format(
         _pad,
-        %Membrane.RemoteStream{} = _input_caps,
+        %Membrane.RemoteStream{} = _input_stream_format,
         _ctx,
-        %{input_caps: nil} = _state
+        %{input_stream_format: nil} = _state
       ) do
     raise """
-    You need to specify `input_caps` in options if `Membrane.RemoteStream` will be received on the `:input` pad
+    You need to specify `input_stream_format` in options if `Membrane.RemoteStream` will be received on the `:input` pad
     """
   end
 
   @impl true
-  def handle_caps(_pad, input_caps, _ctx, %{input_caps: input_caps} = state) do
+  def handle_stream_format(
+        _pad,
+        input_stream_format,
+        _ctx,
+        %{input_stream_format: input_stream_format} = state
+      ) do
     {[], state}
   end
 
   @impl true
-  def handle_caps(_pad, %Membrane.RemoteStream{} = _input_caps, _ctx, state) do
+  def handle_stream_format(_pad, %Membrane.RemoteStream{} = _input_stream_format, _ctx, state) do
     {[], state}
   end
 
   @impl true
-  def handle_caps(pad, input_caps, _ctx, state) do
-    raise "received invalid caps on pad #{inspect(pad)}, expected: #{inspect(state.input_caps)}, got: #{inspect(input_caps)}"
+  def handle_stream_format(pad, input_stream_format, _ctx, state) do
+    raise "received invalid stream_format on pad #{inspect(pad)}, expected: #{inspect(state.input_stream_format)}, got: #{inspect(input_stream_format)}"
   end
 
   # send demand to input pads that don't have a long enough queue
@@ -232,13 +240,16 @@ defmodule Membrane.AudioInterleaver do
     |> then(fn demands -> {demands, state} end)
   end
 
-  defp interleave(%{input_caps: input_caps, pads: pads, order: order} = state, n_bytes) do
-    sample_size = RawAudio.sample_size(input_caps)
+  defp interleave(
+         %{input_stream_format: input_stream_format, pads: pads, order: order} = state,
+         n_bytes
+       ) do
+    sample_size = RawAudio.sample_size(input_stream_format)
 
     n_bytes = trunc_to_whole_samples(n_bytes, sample_size)
 
     if n_bytes >= sample_size do
-      pads = append_silence_if_needed(input_caps, pads, n_bytes)
+      pads = append_silence_if_needed(input_stream_format, pads, n_bytes)
       {payload, pads} = DoInterleave.interleave(n_bytes, sample_size, pads, order)
       buffer = {:output, %Buffer{payload: payload}}
       {buffer, %{state | pads: pads}}
@@ -248,19 +259,19 @@ defmodule Membrane.AudioInterleaver do
   end
 
   # append silence to each queue shorter than min_length
-  defp append_silence_if_needed(caps, pads, min_length) do
+  defp append_silence_if_needed(stream_format, pads, min_length) do
     pads
     |> Enum.map(fn {pad, %{queue: queue} = pad_value} ->
-      {pad, %{pad_value | queue: do_append_silence(queue, min_length, caps)}}
+      {pad, %{pad_value | queue: do_append_silence(queue, min_length, stream_format)}}
     end)
     |> Map.new()
   end
 
-  defp do_append_silence(queue, length_bytes, caps) do
-    missing_frames = ceil((length_bytes - byte_size(queue)) / RawAudio.frame_size(caps))
+  defp do_append_silence(queue, length_bytes, stream_format) do
+    missing_frames = ceil((length_bytes - byte_size(queue)) / RawAudio.frame_size(stream_format))
 
     if missing_frames > 0 do
-      silence = caps |> RawAudio.silence() |> String.duplicate(missing_frames)
+      silence = stream_format |> RawAudio.silence() |> String.duplicate(missing_frames)
       queue <> silence
     else
       queue
