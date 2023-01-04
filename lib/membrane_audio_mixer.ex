@@ -82,14 +82,14 @@ defmodule Membrane.AudioMixer do
               ]
 
   def_output_pad :output,
-    mode: :pull,
+    demand_mode: :auto,
     availability: :always,
     caps: RawAudio
 
   def_input_pad :input,
-    mode: :pull,
+    demand_mode: :auto,
     availability: :on_request,
-    demand_unit: :bytes,
+    demand_unit: :buffers,
     caps: @supported_caps,
     options: [
       offset: [
@@ -156,27 +156,27 @@ defmodule Membrane.AudioMixer do
     {:ok, %{state | mixer_state: nil}}
   end
 
-  @impl true
-  def handle_demand(:output, size, :bytes, _context, state) do
-    do_handle_demand(size, state)
-  end
+  # @impl true
+  # def handle_demand(:output, size, :bytes, _context, state) do
+  #   do_handle_demand(size, state)
+  # end
 
-  @impl true
-  def handle_demand(:output, _buffers_count, :buffers, _context, %{caps: nil} = state) do
-    {:ok, state}
-  end
+  # @impl true
+  # def handle_demand(:output, _buffers_count, :buffers, _context, %{caps: nil} = state) do
+  #   {:ok, state}
+  # end
 
-  @impl true
-  def handle_demand(
-        :output,
-        buffers_count,
-        :buffers,
-        _context,
-        %{frames_per_buffer: frames, caps: caps} = state
-      ) do
-    size = buffers_count * RawAudio.frames_to_bytes(frames, caps)
-    do_handle_demand(size, state)
-  end
+  # @impl true
+  # def handle_demand(
+  #       :output,
+  #       buffers_count,
+  #       :buffers,
+  #       _context,
+  #       %{frames_per_buffer: frames, caps: caps} = state
+  #     ) do
+  #   size = buffers_count * RawAudio.frames_to_bytes(frames, caps)
+  #   do_handle_demand(size, state)
+  # end
 
   @impl true
   def handle_start_of_stream(pad, context, state) do
@@ -191,7 +191,7 @@ defmodule Membrane.AudioMixer do
         %{queue: silence, offset: offset, ready_to_mix?: ready_to_mix?}
       )
 
-    {{:ok, redemand: :output}, state}
+    {:ok, state}
   end
 
   @impl true
@@ -287,7 +287,7 @@ defmodule Membrane.AudioMixer do
     state = %{state | caps: caps}
     mixer_state = initialize_mixer_state(caps, state)
 
-    {{:ok, caps: {:output, caps}, redemand: :output}, %{state | mixer_state: mixer_state}}
+    {{:ok, caps: {:output, caps}}, %{state | mixer_state: mixer_state}}
   end
 
   @impl true
@@ -323,10 +323,10 @@ defmodule Membrane.AudioMixer do
   defp mix_or_redemand(size, time_frame, context, state) do
     if size >= time_frame do
       {actions, state} = mix_and_get_actions(context, state)
-      actions = if actions == [], do: [redemand: :output], else: actions
+      actions = if actions == [], do: [], else: actions
       {{:ok, actions}, state}
     else
-      {{:ok, redemand: :output}, state}
+      {:ok, state}
     end
   end
 
@@ -343,15 +343,15 @@ defmodule Membrane.AudioMixer do
     mixer_module.init(caps)
   end
 
-  defp do_handle_demand(size, %{pads: pads} = state) do
-    pads
-    |> Enum.map(fn {pad, %{queue: queue}} ->
-      queue
-      |> byte_size()
-      |> then(&{:demand, {pad, max(0, size - &1)}})
-    end)
-    |> then(fn demands -> {{:ok, demands}, state} end)
-  end
+  # defp do_handle_demand(size, %{pads: pads} = state) do
+  #   pads
+  #   |> Enum.map(fn {pad, %{queue: queue}} ->
+  #     queue
+  #     |> byte_size()
+  #     |> then(&{:demand, {pad, max(0, size - &1)}})
+  #   end)
+  #   |> then(fn demands -> {{:ok, demands}, state} end)
+  # end
 
   defp mix_and_get_actions(context, %{caps: caps, pads: pads} = state) do
     time_frame = RawAudio.frame_size(caps)
