@@ -14,7 +14,7 @@ defmodule Membrane.AudioMixerBin do
 
   Recommended to use in case of mixing jobs with many inputs.
 
-  Number of inputs to the bin must be specified in `number_of_inputs` option.
+  A number of inputs to the bin must be specified in the `number_of_inputs` option.
   """
 
   use Membrane.Bin
