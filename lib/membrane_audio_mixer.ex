@@ -22,7 +22,6 @@ defmodule Membrane.AudioMixer do
   alias Membrane.RawAudio
   alias Membrane.Time
 
-
   def_options stream_format: [
                 type: :struct,
                 spec: RawAudio.t(),
