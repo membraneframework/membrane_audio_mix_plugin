@@ -13,6 +13,8 @@ defmodule Membrane.AudioMixerBin do
   Bin allows for specifying options for `Membrane.AudioMixer`, which are applied for all AudioMixers.
 
   Recommended to use in case of mixing jobs with many inputs.
+
+  Number of inputs to the bin must be specified in `number_of_inputs` option.
   """
 
   use Membrane.Bin
@@ -22,12 +24,6 @@ defmodule Membrane.AudioMixerBin do
 
   alias Membrane.{AudioMixer, RawAudio}
   alias Membrane.Bin.PadData
-
-  # @supported_stream_formats [
-  #   {RawAudio,
-  #    sample_format: Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])},
-  #   Membrane.RemoteStream
-  # ]
 
   def_options max_inputs_per_node: [
                 spec: pos_integer(),
@@ -42,6 +38,12 @@ defmodule Membrane.AudioMixerBin do
                 The options that would be passed to each created AudioMixer.
                 """,
                 default: %AudioMixer{}
+              ],
+              number_of_inputs: [
+                spec: pos_integer(),
+                description: """
+                The exact number of inputs to the bin. Must be at least 1.
+                """
               ]
 
   def_input_pad :input,
@@ -70,14 +72,33 @@ defmodule Membrane.AudioMixerBin do
 
   @impl true
   def handle_init(_ctx, options) do
-    state = options |> Map.from_struct()
+    state =
+      options
+      |> Map.put(:current_inputs, 0)
+      |> Map.from_struct()
 
     {[], state}
   end
 
   @impl true
-  def handle_pad_added(_pad_ref, %{playback: :stopped}, state) do
-    {[], state}
+  def handle_pad_added({_mod, :input, _ref} = _pad_ref, %{playback: :stopped} = ctx, state) do
+    current_inputs = state.current_inputs + 1
+
+    if current_inputs > state.number_of_inputs do
+      raise """
+      The number of inputs to the #{__MODULE__} has exceeded the maximum number of inputs per node (#{current_inputs} > #{state.number_of_inputs}).
+      """
+    end
+
+    state = %{state | current_inputs: current_inputs}
+
+    if current_inputs == state.number_of_inputs do
+      spec = create_structure(ctx.pads, state.max_inputs_per_node, state.mixer_options)
+
+      {[spec: spec], state}
+    else
+      {[], state}
+    end
   end
 
   def handle_pad_added(_pad_ref, %{playback: playback}, _state)
@@ -89,14 +110,26 @@ defmodule Membrane.AudioMixerBin do
   end
 
   @impl true
-  def handle_parent_notification(:done, ctx, state) do
+  def handle_parent_notification({:number_of_inputs, number_of_inputs}, _ctx, state) do
+    if state.current_inputs > number_of_inputs do
+      raise """
+      The current number of inputs to the #{__MODULE__} exceeds new number of inputs (#{state.current_inputs} > #{number_of_inputs}).
+      """
+    end
+
+    state = %{state | number_of_inputs: number_of_inputs}
+
+    {[], state}
+  end
+
+  defp create_structure(pads, max_inputs_per_node, mixer_options) do
     input_pads =
-      ctx.pads
+      pads
       |> Map.values()
       |> Enum.filter(fn %{direction: direction} -> direction == :input end)
 
-    spec = gen_mixing_spec(input_pads, state.max_inputs_per_node, state.mixer_options)
-    {[spec: spec], state}
+    spec = gen_mixing_spec(input_pads, max_inputs_per_node, mixer_options)
+    spec
   end
 
   @spec gen_mixing_spec([PadData.t()], pos_integer(), AudioMixer.t()) ::

@@ -12,20 +12,6 @@ defmodule Membrane.AudioMixerBinTest do
   @input_path_1 Path.expand("../fixtures/mixer_bin/input-1.raw", __DIR__)
   @input_path_2 Path.expand("../fixtures/mixer_bin/input-2.raw", __DIR__)
 
-  defmodule BinTestPipeline do
-    use Membrane.Pipeline
-    @impl true
-    def handle_init(_ctx, %{spec: spec, bin_name: name}) do
-      send(self(), {:continue, name})
-      {[spec: spec, playback: :playing], %{}}
-    end
-
-    @impl true
-    def handle_child_notification({:continue, name}, _element, _ctx, state) do
-      {[forward: {name, :done}], state}
-    end
-  end
-
   @moduletag :tmp_dir
   describe "AudioMixerBin should mix tracks the same as AudioMixer when" do
     defp prepare_outputs(%{tmp_dir: out_dir}) do
@@ -78,6 +64,7 @@ defmodule Membrane.AudioMixerBinTest do
           [
             child(:mixer, %Membrane.AudioMixerBin{
               max_inputs_per_node: max_inputs_per_node,
+              number_of_inputs: length(input_paths),
               mixer_options: %Membrane.AudioMixer{
                 stream_format: stream_format,
                 prevent_clipping: false
@@ -91,8 +78,7 @@ defmodule Membrane.AudioMixerBinTest do
       ]
 
       mixer_bin_pipeline = [
-        module: BinTestPipeline,
-        custom_args: %{spec: structure_bin, bin_name: :mixer}
+        structure: structure_bin
       ]
 
       {
@@ -103,6 +89,9 @@ defmodule Membrane.AudioMixerBinTest do
 
     defp play_pipeline(pipeline_options) do
       assert pipeline = Pipeline.start_link_supervised!(pipeline_options)
+
+      assert_pipeline_play(pipeline)
+
       assert_start_of_stream(pipeline, :file_sink, :input)
       assert_end_of_stream(pipeline, :file_sink, :input)
     end
