@@ -22,11 +22,6 @@ defmodule Membrane.AudioMixer do
   alias Membrane.RawAudio
   alias Membrane.Time
 
-  # @supported_stream_format [
-  #   {RawAudio,
-  #    sample_format: Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])},
-  #   Membrane.RemoteStream
-  # ]
 
   def_options stream_format: [
                 type: :struct,
