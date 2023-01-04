@@ -151,11 +151,6 @@ defmodule Membrane.AudioMixer do
     {[], state}
   end
 
-  # @impl true
-  # def handle_prepared_to_stopped(_context, state) do
-  #   {:ok, %{state | mixer_state: nil}}
-  # end
-
   @impl true
   def handle_demand(:output, size, :bytes, _context, state) do
     do_handle_demand(size, state)
