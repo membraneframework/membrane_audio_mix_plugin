@@ -54,35 +54,30 @@ defmodule Mixing.Pipeline do
   use Membrane.Pipeline
 
   @impl true
-  def handle_init(_) do
-    children = [
-      file_src_1: %Membrane.File.Source{location: "/tmp/input_1.raw"},
-      file_src_2: %Membrane.File.Source{location: "/tmp/input_2.raw"},
-      mixer: %Membrane.AudioMixer{
+  def handle_init(_ctx, _options) do
+    structure = [
+      child({:file_src, 1}, %Membrane.File.Source{location: "/tmp/input_1.raw"})
+      |> get_child(:mixer),
+
+      child({:file_src, 2}, %Membrane.File.Source{location: "/tmp/input_2.raw"})
+      |> via_in(:input, options: [offset: Membrane.Time.milliseconds(5000)])
+      |> get_child(:mixer),
+
+      child(:mixer, %Membrane.AudioMixer{
         caps: %Membrane.RawAudio{
           channels: 1,
           sample_rate: 16_000,
           sample_format: :s16le
         }
-      },
-      converter: %Membrane.FFmpeg.SWResample.Converter{
+      }) 
+      |> child(:converter, %Membrane.FFmpeg.SWResample.Converter{
         input_caps: %Membrane.RawAudio{channels: 1, sample_rate: 16_000, sample_format: :s16le},
         output_caps: %Membrane.RawAudio{channels: 2, sample_rate: 48_000, sample_format: :s16le}
-      },
-      player: Membrane.PortAudio.Sink
+      })
+      |> child(:player, Membrane.PortAudio.Sink)
     ]
 
-    links = [
-      link(:file_src_1)
-      |> to(:mixer)
-      |> to(:converter)
-      |> to(:player),
-      link(:file_src_2)
-      |> via_in(:input, options: [offset: Membrane.Time.milliseconds(5000)])
-      |> to(:mixer)
-    ]
-
-    {{:ok, spec: %ParentSpec{children: children, links: links}}, %{}}
+    {[spec: structure], %{}}
   end
 end
 ```
@@ -96,37 +91,29 @@ defmodule Interleave.Pipeline do
   alias Membrane.File.{Sink, Source}
 
   @impl true
-  def handle_init({path_to_wav_1, path_to_wav_2}) do
-    children = %{
-      file_1: %Source{location: path_to_wav_1},
-      file_2: %Source{location: path_to_wav_2},
-      parser_1: Membrane.WAV.Parser,
-      parser_2: Membrane.WAV.Parser,
-      interleaver: %Membrane.AudioInterleaver{
+  def handle_init(_ctx, {path_to_wav_1, path_to_wav_2}) do
+    structure = [
+      child({:file, 1}, %Source{location: path_to_wav_1})
+      |> child({:parser, 1}, Membrane.WAV.Parser)
+      |> get_child(:interleaver),
+
+      child({:file, 2}, %Source{location: path_to_wav_2})
+      |> child({:parser, 2}, Membrane.WAV.Parser)
+      |> get_child(:interleaver),
+
+
+      child(:interleaver, %Membrane.AudioInterleaver{
         input_caps: %Membrane.RawAudio{
           channels: 1,
           sample_rate: 16_000,
           sample_format: :s16le
         },
         order: [:left, :right]
-      },
-      file_sink: %Sink{location: "output.raw"}
-    }
-
-    links = [
-      link(:file_1)
-      |> to(:parser_1)
-      |> via_in(Pad.ref(:input, :left))
-      |> to(:interleaver),
-      link(:file_2)
-      |> to(:parser_2)
-      |> via_in(Pad.ref(:input, :right))
-      |> to(:interleaver),
-      link(:interleaver)
-      |> to(:file_sink)
+      })
+      |> child(:file_sink, %Sink{location: "output.raw"})
     ]
 
-    {{:ok, spec: %ParentSpec{children: children, links: links}}, %{}}
+    {[spec: structure], %{}}
   end
 end
 
@@ -134,7 +121,7 @@ end
 
 ## Copyright and License
 
-Copyright 2021, [Software Mansion](https://swmansion.com/?utm_source=git&utm_medium=readme&utm_campaign=membrane)
+Copyright 2023, [Software Mansion](https://swmansion.com/?utm_source=git&utm_medium=readme&utm_campaign=membrane)
 
 [![Software Mansion](https://logo.swmansion.com/logo?color=white&variant=desktop&width=200&tag=membrane-github)](https://swmansion.com/?utm_source=git&utm_medium=readme&utm_campaign=membrane)
 
