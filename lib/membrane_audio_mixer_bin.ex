@@ -132,6 +132,11 @@ defmodule Membrane.AudioMixerBin do
     spec
   end
 
+  @doc """
+  Generates a spec for a single mixer or a tree of mixers.
+  Levels of the tree will be 0-indexed with tree root being level 0
+  For a bottom level of mixing tree (leaves of the tree) links generator will be used to generate links between inputs and mixers.
+  """
   @spec gen_mixing_spec([PadData.t()], pos_integer(), AudioMixer.t()) ::
           Membrane.ChildrenSpec.t()
   def gen_mixing_spec([single_input_data], _max_degree, mixer_options) do
@@ -153,12 +158,9 @@ defmodule Membrane.AudioMixerBin do
       mixer_options: mixer_options
     }
 
-    # levels will be 0-indexed with tree root being level 0
     leaves_level = levels - 1
 
-    # links generator to be used only for bottom level of mixing tree
     links_generator = fn _inputs_number, nodes_num, level ->
-      # inputs_number == length(inputs_data)
       inputs_data
       |> Enum.with_index()
       |> Enum.map(fn {%{ref: pad_ref, options: %{offset: offset}}, i} ->
