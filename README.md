@@ -20,8 +20,8 @@ Add the following line to your `deps` in `mix.exs`. Run `mix deps.get`.
 
 Both elements operate only on raw audio (PCM), so some parser may be needed to precede them in a pipeline.
 
-Audio format can be set as an element option or received through caps from input pads. All
-caps received from input pads have to be identical and match ones in element option (if that
+Audio format can be set as an element option or received through stream format from input pads. All
+stream format received from input pads have to be identical and match ones in element option (if that
 option is different from `nil`).
 
 Input pads can have offset - it tells how much silence should be added before first sample
@@ -64,15 +64,15 @@ defmodule Mixing.Pipeline do
       |> get_child(:mixer),
 
       child(:mixer, %Membrane.AudioMixer{
-        caps: %Membrane.RawAudio{
+        stream_format: %Membrane.RawAudio{
           channels: 1,
           sample_rate: 16_000,
           sample_format: :s16le
         }
       }) 
       |> child(:converter, %Membrane.FFmpeg.SWResample.Converter{
-        input_caps: %Membrane.RawAudio{channels: 1, sample_rate: 16_000, sample_format: :s16le},
-        output_caps: %Membrane.RawAudio{channels: 2, sample_rate: 48_000, sample_format: :s16le}
+        input_stream_format: %Membrane.RawAudio{channels: 1, sample_rate: 16_000, sample_format: :s16le},
+        output_stream_format: %Membrane.RawAudio{channels: 2, sample_rate: 48_000, sample_format: :s16le}
       })
       |> child(:player, Membrane.PortAudio.Sink)
     ]
@@ -103,7 +103,7 @@ defmodule Interleave.Pipeline do
 
 
       child(:interleaver, %Membrane.AudioInterleaver{
-        input_caps: %Membrane.RawAudio{
+        input_stream_format: %Membrane.RawAudio{
           channels: 1,
           sample_rate: 16_000,
           sample_format: :s16le

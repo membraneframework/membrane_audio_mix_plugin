@@ -1,14 +1,16 @@
-#include "caps_audio_raw.h"
+#include "stream_format_audio_raw.h"
 
 /**
  * Converts one raw sample into its numeric value, interpreting it for given
  * format.
  */
-int64_t caps_audio_raw_sample_to_value(uint8_t *sample, CapsAudioRaw *caps) {
+int64_t
+stream_format_audio_raw_sample_to_value(uint8_t *sample,
+                                        StreamFormatAudioRaw *stream_format) {
   bool is_format_le =
-      (caps->sample_format & MEMBRANE_SAMPLE_FORMAT_ENDIANITY) ==
+      (stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_ENDIANITY) ==
       MEMBRANE_SAMPLE_FORMAT_ENDIANITY_LE;
-  uint8_t size = caps_audio_raw_sample_byte_size(caps);
+  uint8_t size = stream_format_audio_raw_sample_byte_size(stream_format);
   union Value ret;
   ret.u_val = 0;
 
@@ -27,7 +29,7 @@ int64_t caps_audio_raw_sample_to_value(uint8_t *sample, CapsAudioRaw *caps) {
   uint32_t pad_left = MAX_SIZE - size;
   ret.u_val <<= 8 * pad_left;
 
-  bool is_signed = caps->sample_format & MEMBRANE_SAMPLE_FORMAT_TYPE;
+  bool is_signed = stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_TYPE;
   if (is_signed) {
     return (int64_t)(ret.s_val >> 8 * pad_left);
   } else {
@@ -38,9 +40,9 @@ int64_t caps_audio_raw_sample_to_value(uint8_t *sample, CapsAudioRaw *caps) {
 /**
  * Converts value into one raw sample, encoding it in given format.
  */
-void caps_audio_raw_value_to_sample(int64_t value, uint8_t *sample,
-                                    CapsAudioRaw *caps) {
-  bool is_signed = caps->sample_format & MEMBRANE_SAMPLE_FORMAT_TYPE;
+void stream_format_audio_raw_value_to_sample(
+    int64_t value, uint8_t *sample, StreamFormatAudioRaw *stream_format) {
+  bool is_signed = stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_TYPE;
   union Value ret;
 
   if (is_signed) {
@@ -50,10 +52,10 @@ void caps_audio_raw_value_to_sample(int64_t value, uint8_t *sample,
   }
 
   bool is_format_le =
-      (caps->sample_format & MEMBRANE_SAMPLE_FORMAT_ENDIANITY) ==
+      (stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_ENDIANITY) ==
       MEMBRANE_SAMPLE_FORMAT_ENDIANITY_LE;
 
-  uint8_t size = caps_audio_raw_sample_byte_size(caps);
+  uint8_t size = stream_format_audio_raw_sample_byte_size(stream_format);
   if (is_format_le) {
     for (uint8_t i = 0; i < size; ++i) {
       sample[i] = ret.u_val & 0xFF;
@@ -70,9 +72,10 @@ void caps_audio_raw_value_to_sample(int64_t value, uint8_t *sample,
 /**
  * Returns maximum sample value for given format.
  */
-int64_t caps_audio_raw_sample_max(CapsAudioRaw *caps) {
-  bool is_signed = caps->sample_format & MEMBRANE_SAMPLE_FORMAT_TYPE;
-  uint32_t size = caps->sample_format & MEMBRANE_SAMPLE_FORMAT_SIZE;
+int64_t
+stream_format_audio_raw_sample_max(StreamFormatAudioRaw *stream_format) {
+  bool is_signed = stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_TYPE;
+  uint32_t size = stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_SIZE;
   if (is_signed) {
     return (1 << (size - 1)) - 1;
   } else {
@@ -83,11 +86,12 @@ int64_t caps_audio_raw_sample_max(CapsAudioRaw *caps) {
 /**
  * Returns minimum sample value for given format.
  */
-int64_t caps_audio_raw_sample_min(CapsAudioRaw *caps) {
-  bool is_signed = caps->sample_format & MEMBRANE_SAMPLE_FORMAT_TYPE;
+int64_t
+stream_format_audio_raw_sample_min(StreamFormatAudioRaw *stream_format) {
+  bool is_signed = stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_TYPE;
 
   if (is_signed) {
-    uint32_t size = caps->sample_format & MEMBRANE_SAMPLE_FORMAT_SIZE;
+    uint32_t size = stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_SIZE;
     return -(1 << (size - 1));
   } else {
     return 0;
@@ -97,6 +101,9 @@ int64_t caps_audio_raw_sample_min(CapsAudioRaw *caps) {
 /**
  * Returns byte size for given format.
  */
-uint8_t caps_audio_raw_sample_byte_size(CapsAudioRaw *caps) {
-  return (uint8_t)((caps->sample_format & MEMBRANE_SAMPLE_FORMAT_SIZE) / 8);
+uint8_t
+stream_format_audio_raw_sample_byte_size(StreamFormatAudioRaw *stream_format) {
+  return (
+      uint8_t)((stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_SIZE) /
+               8);
 }

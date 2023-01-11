@@ -10,21 +10,21 @@ defmodule Membrane.AudioMixer.Adder do
   alias Membrane.AudioMixer.Helpers
   alias Membrane.RawAudio
 
-  @enforce_keys [:caps, :clipper, :sample_size]
+  @enforce_keys [:stream_format, :clipper, :sample_size]
   defstruct @enforce_keys
 
   @type t :: %__MODULE__{
-          caps: RawAudio.t(),
+          stream_format: RawAudio.t(),
           clipper: fun(),
           sample_size: integer()
         }
 
   @impl true
-  def init(caps) do
-    size = RawAudio.sample_size(caps)
-    clipper = clipper_factory(caps)
+  def init(stream_format) do
+    size = RawAudio.sample_size(stream_format)
+    clipper = clipper_factory(stream_format)
 
-    %__MODULE__{caps: caps, clipper: clipper, sample_size: size}
+    %__MODULE__{stream_format: stream_format, clipper: clipper, sample_size: size}
   end
 
   @impl true
@@ -40,9 +40,9 @@ defmodule Membrane.AudioMixer.Adder do
   @impl true
   def flush(state), do: {<<>>, state}
 
-  defp clipper_factory(caps) do
-    max_sample_value = RawAudio.sample_max(caps)
-    min_sample_value = RawAudio.sample_min(caps)
+  defp clipper_factory(stream_format) do
+    max_sample_value = RawAudio.sample_max(stream_format)
+    min_sample_value = RawAudio.sample_min(stream_format)
 
     fn sample ->
       cond do
@@ -55,16 +55,16 @@ defmodule Membrane.AudioMixer.Adder do
 
   defp do_mix(samples, mix_params, acc \\ 0)
 
-  defp do_mix([], %{caps: caps, clipper: clipper}, acc) do
+  defp do_mix([], %{stream_format: stream_format, clipper: clipper}, acc) do
     acc
     |> clipper.()
-    |> RawAudio.value_to_sample(caps)
+    |> RawAudio.value_to_sample(stream_format)
   end
 
-  defp do_mix([sample | samples], %{caps: caps} = mix_params, acc) do
+  defp do_mix([sample | samples], %{stream_format: stream_format} = mix_params, acc) do
     acc =
       sample
-      |> RawAudio.sample_to_value(caps)
+      |> RawAudio.sample_to_value(stream_format)
       |> then(&(&1 + acc))
 
     do_mix(samples, mix_params, acc)
