@@ -134,6 +134,7 @@ defmodule Membrane.AudioMixerBin do
 
   @doc """
   Generates a spec for a single mixer or a tree of mixers.
+
   Levels of the tree will be 0-indexed with tree root being level 0
   For a bottom level of mixing tree (leaves of the tree) links generator will be used to generate links between inputs and mixers.
   """
@@ -195,8 +196,7 @@ defmodule Membrane.AudioMixerBin do
 
   defp build_mixers_tree(level, 1, structure_acc, _consts, _link_generator)
        when level < 0 do
-    structure_acc = [get_child({:mixer, {0, 0}}) |> bin_output()] ++ structure_acc
-    structure_acc
+    [get_child({:mixer, {0, 0}}) |> bin_output()] ++ structure_acc
   end
 
   defp build_mixers_tree(level, inputs_number, structure_acc, consts, link_generator) do
