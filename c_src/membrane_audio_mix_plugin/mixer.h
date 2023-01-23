@@ -6,7 +6,7 @@
 #include <stdint.h>
 
 typedef struct _mixer_state {
-  StreamFormatAudioRaw stream_format;
+  RawAudioFormat stream_format;
   int32_t sample_size;
   int32_t sample_max;
   int32_t sample_min;

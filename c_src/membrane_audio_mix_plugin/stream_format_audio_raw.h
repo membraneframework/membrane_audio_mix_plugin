@@ -9,19 +9,17 @@ union Value {
   uint32_t u_val;
 };
 
-struct _StreamFormatAudioRaw {
+struct _RawAudioFormat {
   uint32_t channels;
   uint32_t sample_format;
   uint32_t sample_rate;
 };
-typedef struct _StreamFormatAudioRaw StreamFormatAudioRaw;
+typedef struct _RawAudioFormat RawAudioFormat;
 
-int64_t
-stream_format_audio_raw_sample_to_value(uint8_t *sample,
-                                        StreamFormatAudioRaw *stream_format);
-void stream_format_audio_raw_value_to_sample(
-    int64_t value, uint8_t *sample, StreamFormatAudioRaw *stream_format);
-int64_t stream_format_audio_raw_sample_max(StreamFormatAudioRaw *stream_format);
-int64_t stream_format_audio_raw_sample_min(StreamFormatAudioRaw *stream_format);
-uint8_t
-stream_format_audio_raw_sample_byte_size(StreamFormatAudioRaw *stream_format);
+int64_t stream_format_audio_raw_sample_to_value(uint8_t *sample,
+                                                RawAudioFormat *stream_format);
+void stream_format_audio_raw_value_to_sample(int64_t value, uint8_t *sample,
+                                             RawAudioFormat *stream_format);
+int64_t stream_format_audio_raw_sample_max(RawAudioFormat *stream_format);
+int64_t stream_format_audio_raw_sample_min(RawAudioFormat *stream_format);
+uint8_t stream_format_audio_raw_sample_byte_size(RawAudioFormat *stream_format);
