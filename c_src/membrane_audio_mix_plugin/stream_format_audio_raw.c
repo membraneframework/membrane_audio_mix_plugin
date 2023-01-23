@@ -99,8 +99,8 @@ int64_t stream_format_audio_raw_sample_min(RawAudioFormat *stream_format) {
  * Returns byte size for given format.
  */
 uint8_t
-stream_format_audio_raw_sample_byte_size(StreamFormatAudioRaw *stream_format) {
-  return (
-      uint8_t)((stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_SIZE) /
-               8);
+stream_format_audio_raw_sample_byte_size(RawAudioFormat *stream_format) {
+  const uint32_t stream_format_size =
+      stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_SIZE;
+  return (uint8_t)(stream_format_size / 8);
 }
