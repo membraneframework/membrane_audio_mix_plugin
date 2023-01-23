@@ -1,15 +1,15 @@
-#include "stream_format_audio_raw.h"
+#include "raw_audio_format.h"
 
 /**
  * Converts one raw sample into its numeric value, interpreting it for given
  * format.
  */
-int64_t stream_format_audio_raw_sample_to_value(uint8_t *sample,
+int64_t raw_audio_format_sample_to_value(uint8_t *sample,
                                                 RawAudioFormat *stream_format) {
   bool is_format_le =
       (stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_ENDIANITY) ==
       MEMBRANE_SAMPLE_FORMAT_ENDIANITY_LE;
-  uint8_t size = stream_format_audio_raw_sample_byte_size(stream_format);
+  uint8_t size = raw_audio_format_sample_byte_size(stream_format);
   union Value ret;
   ret.u_val = 0;
 
@@ -39,7 +39,7 @@ int64_t stream_format_audio_raw_sample_to_value(uint8_t *sample,
 /**
  * Converts value into one raw sample, encoding it in given format.
  */
-void stream_format_audio_raw_value_to_sample(int64_t value, uint8_t *sample,
+void raw_audio_format_value_to_sample(int64_t value, uint8_t *sample,
                                              RawAudioFormat *stream_format) {
   bool is_signed = stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_TYPE;
   union Value ret;
@@ -54,7 +54,7 @@ void stream_format_audio_raw_value_to_sample(int64_t value, uint8_t *sample,
       (stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_ENDIANITY) ==
       MEMBRANE_SAMPLE_FORMAT_ENDIANITY_LE;
 
-  uint8_t size = stream_format_audio_raw_sample_byte_size(stream_format);
+  uint8_t size = raw_audio_format_sample_byte_size(stream_format);
   if (is_format_le) {
     for (uint8_t i = 0; i < size; ++i) {
       sample[i] = ret.u_val & 0xFF;
@@ -71,7 +71,7 @@ void stream_format_audio_raw_value_to_sample(int64_t value, uint8_t *sample,
 /**
  * Returns maximum sample value for given format.
  */
-int64_t stream_format_audio_raw_sample_max(RawAudioFormat *stream_format) {
+int64_t raw_audio_format_sample_max(RawAudioFormat *stream_format) {
   bool is_signed = stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_TYPE;
   uint32_t size = stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_SIZE;
   if (is_signed) {
@@ -84,7 +84,7 @@ int64_t stream_format_audio_raw_sample_max(RawAudioFormat *stream_format) {
 /**
  * Returns minimum sample value for given format.
  */
-int64_t stream_format_audio_raw_sample_min(RawAudioFormat *stream_format) {
+int64_t raw_audio_format_sample_min(RawAudioFormat *stream_format) {
   bool is_signed = stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_TYPE;
 
   if (is_signed) {
@@ -99,7 +99,7 @@ int64_t stream_format_audio_raw_sample_min(RawAudioFormat *stream_format) {
  * Returns byte size for given format.
  */
 uint8_t
-stream_format_audio_raw_sample_byte_size(RawAudioFormat *stream_format) {
+raw_audio_format_sample_byte_size(RawAudioFormat *stream_format) {
   const uint32_t stream_format_size =
       stream_format->sample_format & MEMBRANE_SAMPLE_FORMAT_SIZE;
   return (uint8_t)(stream_format_size / 8);

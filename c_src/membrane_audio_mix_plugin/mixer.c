@@ -11,9 +11,9 @@ UNIFEX_TERM init(UnifexEnv *env, int32_t channels, uint32_t sample_format,
   state->stream_format.sample_format = sample_format;
   state->stream_format.channels = channels;
   state->stream_format.sample_rate = sample_rate;
-  state->sample_max = stream_format_audio_raw_sample_max(&state->stream_format);
-  state->sample_min = stream_format_audio_raw_sample_min(&state->stream_format);
-  state->sample_size = stream_format_audio_raw_sample_byte_size(&state->stream_format);
+  state->sample_max = raw_audio_format_sample_max(&state->stream_format);
+  state->sample_min = raw_audio_format_sample_min(&state->stream_format);
+  state->sample_size = raw_audio_format_sample_byte_size(&state->stream_format);
   state->queue = NULL;
   state->queue_length = 0;
   state->is_wave_positive = false;
@@ -33,7 +33,7 @@ void get_values(UnifexPayload **buffers, uint32_t buffers_length,
     values[i] = 0;
     for (uint32_t j = 0; j < buffers_length; ++j) {
       uint8_t *sample = buffers[j]->data + chunk_start;
-      values[i] += stream_format_audio_raw_sample_to_value(sample, &state->stream_format);
+      values[i] += raw_audio_format_sample_to_value(sample, &state->stream_format);
     }
   }
 }
@@ -111,13 +111,13 @@ void scale_to_samples(uint8_t *samples, int64_t *values, uint32_t values_length,
   uint8_t *current_sample = samples;
   for (uint32_t i = 0; i < state->queue_length;
        ++i, current_sample += state->sample_size) {
-    stream_format_audio_raw_value_to_sample(state->queue[i], current_sample,
+    raw_audio_format_value_to_sample(state->queue[i], current_sample,
                                    &state->stream_format);
   }
 
   for (uint32_t i = 0; i < values_length;
        ++i, current_sample += state->sample_size) {
-    stream_format_audio_raw_value_to_sample(values[i], current_sample, &state->stream_format);
+    raw_audio_format_value_to_sample(values[i], current_sample, &state->stream_format);
   }
 
   unifex_free(state->queue);

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "stream_format_audio_raw.h"
+#include "raw_audio_format.h"
 #include <erl_nif.h>
 #include <stdbool.h>
 #include <stdint.h>
