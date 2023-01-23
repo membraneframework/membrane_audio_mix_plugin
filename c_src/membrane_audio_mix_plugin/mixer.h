@@ -1,12 +1,12 @@
 #pragma once
 
-#include "caps_audio_raw.h"
+#include "raw_audio_format.h"
 #include <erl_nif.h>
 #include <stdbool.h>
 #include <stdint.h>
 
 typedef struct _mixer_state {
-  CapsAudioRaw caps;
+  RawAudioFormat stream_format;
   int32_t sample_size;
   int32_t sample_max;
   int32_t sample_min;

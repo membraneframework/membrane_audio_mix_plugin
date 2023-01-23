@@ -1,7 +1,7 @@
 defmodule Membrane.AudioMix.Mixfile do
   use Mix.Project
 
-  @version "0.11.1"
+  @version "0.12.0"
   @github_url "https://github.com/membraneframework/membrane_audio_mix_plugin"
 
   def project do
@@ -40,16 +40,16 @@ defmodule Membrane.AudioMix.Mixfile do
 
   defp deps do
     [
-      {:membrane_core, "~> 0.10.0"},
-      {:membrane_common_c, "~> 0.13.0"},
-      {:membrane_raw_audio_format, "~> 0.9.0"},
+      {:membrane_core, "~> 0.11.2"},
+      {:membrane_common_c, "~> 0.14.0"},
+      {:membrane_raw_audio_format, "~> 0.10.0"},
       {:unifex, "~> 1.0"},
       {:bunch, "~> 1.3"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, ">= 0.0.0", only: :dev, runtime: false},
       {:credo, ">= 0.0.0", only: :dev, runtime: false},
-      {:membrane_file_plugin, "~> 0.8", only: :test},
-      {:membrane_mp3_mad_plugin, "~> 0.11", only: :test}
+      {:membrane_file_plugin, "~> 0.13", only: :test},
+      {:membrane_mp3_mad_plugin, "~> 0.14", only: :test}
     ]
   end
 

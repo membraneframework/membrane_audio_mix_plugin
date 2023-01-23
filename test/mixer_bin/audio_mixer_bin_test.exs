@@ -3,29 +3,14 @@ defmodule Membrane.AudioMixerBinTest do
 
   use ExUnit.Case, async: true
 
-  import Membrane.ParentSpec
+  import Membrane.ChildrenSpec
   import Membrane.Testing.Assertions
 
-  alias Membrane.ParentSpec
   alias Membrane.RawAudio
   alias Membrane.Testing.Pipeline
 
   @input_path_1 Path.expand("../fixtures/mixer_bin/input-1.raw", __DIR__)
   @input_path_2 Path.expand("../fixtures/mixer_bin/input-2.raw", __DIR__)
-
-  defmodule BinTestPipeline do
-    use Membrane.Pipeline
-    @impl true
-    def handle_init(%{spec: spec, bin_name: name}) do
-      send(self(), {:continue, name})
-      {{:ok, spec: spec, playback: :playing}, %{}}
-    end
-
-    @impl true
-    def handle_other({:continue, name}, _ctx, state) do
-      {{:ok, forward: {name, :done}}, state}
-    end
-  end
 
   @moduletag :tmp_dir
   describe "AudioMixerBin should mix tracks the same as AudioMixer when" do
@@ -51,65 +36,64 @@ defmodule Membrane.AudioMixerBinTest do
            max_inputs_per_node,
            audio_format \\ :s16le
          ) do
-      caps = %RawAudio{
+      stream_format = %RawAudio{
         channels: 1,
         sample_rate: 16_000,
         sample_format: audio_format
       }
 
-      elements =
+      structure_file_src =
         input_paths
         |> Enum.with_index(1)
         |> Enum.map(fn {path, index} ->
-          {"file_src_#{index}", %Membrane.File.Source{location: path}}
+          child({:file_src, index}, %Membrane.File.Source{location: path}) |> get_child(:mixer)
         end)
 
-      elements_mixer =
-        elements ++
+      structure_mixer =
+        structure_file_src ++
           [
-            mixer: %Membrane.AudioMixer{
-              caps: caps,
+            child(:mixer, %Membrane.AudioMixer{
+              stream_format: stream_format,
               prevent_clipping: false
-            },
-            file_sink: %Membrane.File.Sink{location: output_path_mixer}
+            })
+            |> child(:file_sink, %Membrane.File.Sink{location: output_path_mixer})
           ]
 
-      elements_bin =
-        elements ++
+      structure_bin =
+        structure_file_src ++
           [
-            mixer: %Membrane.AudioMixerBin{
+            child(:mixer, %Membrane.AudioMixerBin{
               max_inputs_per_node: max_inputs_per_node,
+              number_of_inputs: length(input_paths),
               mixer_options: %Membrane.AudioMixer{
-                caps: caps,
+                stream_format: stream_format,
                 prevent_clipping: false
               }
-            },
-            file_sink: %Membrane.File.Sink{location: output_path_bin}
+            })
+            |> child(:file_sink, %Membrane.File.Sink{location: output_path_bin})
           ]
 
-      links =
-        1..length(input_paths)
-        |> Enum.flat_map(fn index ->
-          [link("file_src_#{index}") |> to(:mixer)]
-        end)
+      mixer_pipeline = [
+        structure: structure_mixer
+      ]
 
-      links = links ++ [link(:mixer) |> to(:file_sink)]
+      mixer_bin_pipeline = [
+        structure: structure_bin
+      ]
 
-      mixer_pipeline = %Pipeline.Options{elements: elements_mixer, links: links}
-
-      mixer_bin_pipeline = %Pipeline.Options{
-        module: BinTestPipeline,
-        custom_args: %{spec: %ParentSpec{children: elements_bin, links: links}, bin_name: :mixer}
+      {
+        mixer_pipeline,
+        mixer_bin_pipeline
       }
-
-      {mixer_pipeline, mixer_bin_pipeline}
     end
 
     defp play_pipeline(pipeline_options) do
-      assert {:ok, pid} = Pipeline.start_link(pipeline_options)
-      assert_start_of_stream(pid, :file_sink, :input)
-      assert_end_of_stream(pid, :file_sink, :input)
-      Pipeline.terminate(pid, blocking?: true)
+      assert pipeline = Pipeline.start_link_supervised!(pipeline_options)
+
+      assert_pipeline_play(pipeline)
+
+      assert_start_of_stream(pipeline, :file_sink, :input)
+      assert_end_of_stream(pipeline, :file_sink, :input)
     end
 
     test "there's only one input", ctx do

@@ -13,16 +13,14 @@ It is a part of [Membrane Multimedia Framework](https://membraneframework.org).
 Add the following line to your `deps` in `mix.exs`. Run `mix deps.get`.
 
 ```elixir
-	{:membrane_audio_mix_plugin, "~> 0.11.1"}
+  {:membrane_audio_mix_plugin, "~> 0.12.0"}
 ```
 
 ## Description
 
 Both elements operate only on raw audio (PCM), so some parser may be needed to precede them in a pipeline.
 
-Audio format can be set as an element option or received through caps from input pads. All
-caps received from input pads have to be identical and match ones in element option (if that
-option is different from `nil`).
+The elements expect to receive the same audio stream format on each input pad. It can be additionally enforced by setting an element option (`:stream_format`)
 
 Input pads can have offset - it tells how much silence should be added before first sample
 from that pad. Offset has to be positive.
@@ -54,35 +52,30 @@ defmodule Mixing.Pipeline do
   use Membrane.Pipeline
 
   @impl true
-  def handle_init(_) do
-    children = [
-      file_src_1: %Membrane.File.Source{location: "/tmp/input_1.raw"},
-      file_src_2: %Membrane.File.Source{location: "/tmp/input_2.raw"},
-      mixer: %Membrane.AudioMixer{
-        caps: %Membrane.RawAudio{
+  def handle_init(_ctx, _options) do
+    structure = [
+      child({:file_src, 1}, %Membrane.File.Source{location: "/tmp/input_1.raw"})
+      |> get_child(:mixer),
+
+      child({:file_src, 2}, %Membrane.File.Source{location: "/tmp/input_2.raw"})
+      |> via_in(:input, options: [offset: Membrane.Time.milliseconds(5000)])
+      |> get_child(:mixer),
+
+      child(:mixer, %Membrane.AudioMixer{
+        stream_format: %Membrane.RawAudio{
           channels: 1,
           sample_rate: 16_000,
           sample_format: :s16le
         }
-      },
-      converter: %Membrane.FFmpeg.SWResample.Converter{
-        input_caps: %Membrane.RawAudio{channels: 1, sample_rate: 16_000, sample_format: :s16le},
-        output_caps: %Membrane.RawAudio{channels: 2, sample_rate: 48_000, sample_format: :s16le}
-      },
-      player: Membrane.PortAudio.Sink
+      }) 
+      |> child(:converter, %Membrane.FFmpeg.SWResample.Converter{
+        input_stream_format: %Membrane.RawAudio{channels: 1, sample_rate: 16_000, sample_format: :s16le},
+        output_stream_format: %Membrane.RawAudio{channels: 2, sample_rate: 48_000, sample_format: :s16le}
+      })
+      |> child(:player, Membrane.PortAudio.Sink)
     ]
 
-    links = [
-      link(:file_src_1)
-      |> to(:mixer)
-      |> to(:converter)
-      |> to(:player),
-      link(:file_src_2)
-      |> via_in(:input, options: [offset: Membrane.Time.milliseconds(5000)])
-      |> to(:mixer)
-    ]
-
-    {{:ok, spec: %ParentSpec{children: children, links: links}}, %{}}
+    {[spec: structure], %{}}
   end
 end
 ```
@@ -96,37 +89,29 @@ defmodule Interleave.Pipeline do
   alias Membrane.File.{Sink, Source}
 
   @impl true
-  def handle_init({path_to_wav_1, path_to_wav_2}) do
-    children = %{
-      file_1: %Source{location: path_to_wav_1},
-      file_2: %Source{location: path_to_wav_2},
-      parser_1: Membrane.WAV.Parser,
-      parser_2: Membrane.WAV.Parser,
-      interleaver: %Membrane.AudioInterleaver{
-        input_caps: %Membrane.RawAudio{
+  def handle_init(_ctx, {path_to_wav_1, path_to_wav_2}) do
+    structure = [
+      child({:file, 1}, %Source{location: path_to_wav_1})
+      |> child({:parser, 1}, Membrane.WAV.Parser)
+      |> get_child(:interleaver),
+
+      child({:file, 2}, %Source{location: path_to_wav_2})
+      |> child({:parser, 2}, Membrane.WAV.Parser)
+      |> get_child(:interleaver),
+
+
+      child(:interleaver, %Membrane.AudioInterleaver{
+        input_stream_format: %Membrane.RawAudio{
           channels: 1,
           sample_rate: 16_000,
           sample_format: :s16le
         },
         order: [:left, :right]
-      },
-      file_sink: %Sink{location: "output.raw"}
-    }
-
-    links = [
-      link(:file_1)
-      |> to(:parser_1)
-      |> via_in(Pad.ref(:input, :left))
-      |> to(:interleaver),
-      link(:file_2)
-      |> to(:parser_2)
-      |> via_in(Pad.ref(:input, :right))
-      |> to(:interleaver),
-      link(:interleaver)
-      |> to(:file_sink)
+      })
+      |> child(:file_sink, %Sink{location: "output.raw"})
     ]
 
-    {{:ok, spec: %ParentSpec{children: children, links: links}}, %{}}
+    {[spec: structure], %{}}
   end
 end
 

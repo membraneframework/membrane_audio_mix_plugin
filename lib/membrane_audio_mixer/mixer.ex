@@ -8,7 +8,7 @@ defmodule Membrane.AudioMixer.Mixer do
   @doc """
   Initializes the mixer's state.
   """
-  @callback init(caps :: RawAudio.t()) :: state_t()
+  @callback init(stream_format :: RawAudio.t()) :: state_t()
 
   @doc """
   Mixes `buffers` to one buffer. Given buffers should have equal sizes.

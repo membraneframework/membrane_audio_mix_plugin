@@ -2,8 +2,8 @@ defmodule Membrane.AudioMixer do
   @moduledoc """
   This element performs audio mixing.
 
-  Audio format can be set as an element option or received through caps from input pads. All
-  received caps have to be identical and match ones in element option (if that option is
+  Audio format can be set as an element option or received through stream_format from input pads. All
+  received stream_format have to be identical and match ones in element option (if that option is
   different from `nil`).
 
   Input pads can have offset - it tells how much silence should be added before first sample
@@ -19,17 +19,10 @@ defmodule Membrane.AudioMixer do
 
   alias Membrane.AudioMixer.{Adder, ClipPreventingAdder, NativeAdder}
   alias Membrane.Buffer
-  alias Membrane.Caps.Matcher
   alias Membrane.RawAudio
   alias Membrane.Time
 
-  @supported_caps [
-    {RawAudio,
-     sample_format: Matcher.one_of([:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be])},
-    Membrane.RemoteStream
-  ]
-
-  def_options caps: [
+  def_options stream_format: [
                 type: :struct,
                 spec: RawAudio.t(),
                 description: """
@@ -84,13 +77,19 @@ defmodule Membrane.AudioMixer do
   def_output_pad :output,
     mode: :pull,
     availability: :always,
-    caps: RawAudio
+    accepted_format: RawAudio
 
   def_input_pad :input,
     mode: :pull,
     availability: :on_request,
     demand_unit: :bytes,
-    caps: @supported_caps,
+    accepted_format:
+      any_of(
+        %RawAudio{sample_format: sample_format}
+        when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be],
+        Membrane.RemoteStream
+      ),
+    #
     options: [
       offset: [
         spec: Time.non_neg_t(),
@@ -100,7 +99,7 @@ defmodule Membrane.AudioMixer do
     ]
 
   @impl true
-  def handle_init(%__MODULE__{caps: caps} = options) do
+  def handle_init(_ctx, %__MODULE__{stream_format: stream_format} = options) do
     if options.native_mixer && !options.prevent_clipping do
       raise("Invalid element options, for native mixer only clipping preventing one is available")
     else
@@ -108,10 +107,10 @@ defmodule Membrane.AudioMixer do
         options
         |> Map.from_struct()
         |> Map.put(:pads, %{})
-        |> Map.put(:mixer_state, initialize_mixer_state(caps, options))
+        |> Map.put(:mixer_state, initialize_mixer_state(stream_format, options))
         |> Map.put(:last_ts_sent, 0)
 
-      {:ok, state}
+      {[], state}
     end
   end
 
@@ -132,28 +131,23 @@ defmodule Membrane.AudioMixer do
         %{queue: <<>>, ready_to_mix?: false}
       )
 
-    {:ok, state}
+    {[], state}
   end
 
   @impl true
   def handle_pad_removed(pad, _context, state) do
     state = Bunch.Access.delete_in(state, [:pads, pad])
 
-    {:ok, state}
+    {[], state}
   end
 
   @impl true
-  def handle_prepared_to_playing(_context, %{caps: %RawAudio{} = caps} = state) do
-    {{:ok, caps: {:output, caps}}, state}
+  def handle_playing(_context, %{stream_format: %RawAudio{} = stream_format} = state) do
+    {[stream_format: {:output, stream_format}], state}
   end
 
-  def handle_prepared_to_playing(_context, %{caps: nil} = state) do
-    {:ok, state}
-  end
-
-  @impl true
-  def handle_prepared_to_stopped(_context, state) do
-    {:ok, %{state | mixer_state: nil}}
+  def handle_playing(_context, %{stream_format: nil} = state) do
+    {[], state}
   end
 
   @impl true
@@ -162,8 +156,8 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_demand(:output, _buffers_count, :buffers, _context, %{caps: nil} = state) do
-    {:ok, state}
+  def handle_demand(:output, _buffers_count, :buffers, _context, %{stream_format: nil} = state) do
+    {[], state}
   end
 
   @impl true
@@ -172,16 +166,19 @@ defmodule Membrane.AudioMixer do
         buffers_count,
         :buffers,
         _context,
-        %{frames_per_buffer: frames, caps: caps} = state
+        %{frames_per_buffer: frames, stream_format: stream_format} = state
       ) do
-    size = buffers_count * RawAudio.frames_to_bytes(frames, caps)
+    size = buffers_count * RawAudio.frames_to_bytes(frames, stream_format)
     do_handle_demand(size, state)
   end
 
   @impl true
   def handle_start_of_stream(pad, context, state) do
     offset = context.pads[pad].options.offset
-    silence = if state.synchronize_buffers?, do: <<>>, else: RawAudio.silence(state.caps, offset)
+
+    silence =
+      if state.synchronize_buffers?, do: <<>>, else: RawAudio.silence(state.stream_format, offset)
+
     ready_to_mix? = not state.synchronize_buffers?
 
     state =
@@ -191,7 +188,7 @@ defmodule Membrane.AudioMixer do
         %{queue: silence, offset: offset, ready_to_mix?: ready_to_mix?}
       )
 
-    {{:ok, redemand: :output}, state}
+    {[redemand: :output], state}
   end
 
   @impl true
@@ -207,18 +204,21 @@ defmodule Membrane.AudioMixer do
 
     {actions, state} = mix_and_get_actions(context, state)
 
-    if all_streams_ended?(context) do
-      {{:ok, actions ++ [{:end_of_stream, :output}]}, state}
-    else
-      {{:ok, actions}, state}
-    end
+    actions =
+      if all_streams_ended?(context) do
+        actions ++ [{:end_of_stream, :output}]
+      else
+        actions
+      end
+
+    {actions, state}
   end
 
   @impl true
   def handle_event(pad, event, _context, state) do
     Membrane.Logger.debug("Received event #{inspect(event)} on pad #{inspect(pad)}")
 
-    {:ok, state}
+    {[], state}
   end
 
   @impl true
@@ -237,7 +237,7 @@ defmodule Membrane.AudioMixer do
          %Buffer{payload: payload, pts: pts},
          false,
          context,
-         %{caps: caps, pads: pads, last_ts_sent: last_ts_sent} = state
+         %{stream_format: stream_format, pads: pads, last_ts_sent: last_ts_sent} = state
        ) do
     offset = get_in(pads, [pad_ref, :offset])
     buffer_ts = pts + offset
@@ -245,7 +245,7 @@ defmodule Membrane.AudioMixer do
     state =
       if buffer_ts >= last_ts_sent do
         diff = buffer_ts - last_ts_sent
-        silence = RawAudio.silence(caps, diff)
+        silence = RawAudio.silence(stream_format, diff)
 
         update_in(
           state,
@@ -257,7 +257,7 @@ defmodule Membrane.AudioMixer do
       end
 
     size = byte_size(get_in(state, [:pads, pad_ref, :queue]))
-    time_frame = RawAudio.frame_size(caps)
+    time_frame = RawAudio.frame_size(stream_format)
 
     mix_or_redemand(size, time_frame, context, state)
   end
@@ -267,7 +267,7 @@ defmodule Membrane.AudioMixer do
          %Buffer{payload: payload},
          true,
          context,
-         %{caps: caps, pads: pads} = state
+         %{stream_format: stream_format, pads: pads} = state
        ) do
     {size, pads} =
       Map.get_and_update(
@@ -278,45 +278,46 @@ defmodule Membrane.AudioMixer do
         end
       )
 
-    time_frame = RawAudio.frame_size(caps)
+    time_frame = RawAudio.frame_size(stream_format)
     mix_or_redemand(size, time_frame, context, %{state | pads: pads})
   end
 
   @impl true
-  def handle_caps(_pad, caps, _context, %{caps: nil} = state) do
-    state = %{state | caps: caps}
-    mixer_state = initialize_mixer_state(caps, state)
+  def handle_stream_format(_pad, stream_format, _context, %{stream_format: nil} = state) do
+    state = %{state | stream_format: stream_format}
+    mixer_state = initialize_mixer_state(stream_format, state)
 
-    {{:ok, caps: {:output, caps}, redemand: :output}, %{state | mixer_state: mixer_state}}
+    {[stream_format: {:output, stream_format}, redemand: :output],
+     %{state | mixer_state: mixer_state}}
   end
 
   @impl true
-  def handle_caps(
+  def handle_stream_format(
         _pad,
-        %Membrane.RemoteStream{} = _input_caps,
+        %Membrane.RemoteStream{} = _input_stream_format,
         _context,
-        %{input_caps: nil} = _state
+        %{input_stream_format: nil} = _state
       ) do
     raise """
-    You need to specify `caps` in options if `Membrane.RemoteStream` will be received on the `:input` pad
+    You need to specify `stream_format` in options if `Membrane.RemoteStream` will be received on the `:input` pad
     """
   end
 
   @impl true
-  def handle_caps(_pad, caps, _context, %{caps: caps} = state) do
-    {:ok, state}
+  def handle_stream_format(_pad, stream_format, _context, %{stream_format: stream_format} = state) do
+    {[], state}
   end
 
   @impl true
-  def handle_caps(_pad, %Membrane.RemoteStream{} = _input_caps, _context, state) do
-    {:ok, state}
+  def handle_stream_format(_pad, %Membrane.RemoteStream{} = _input_stream_format, _context, state) do
+    {[], state}
   end
 
   @impl true
-  def handle_caps(pad, caps, _context, state) do
+  def handle_stream_format(pad, stream_format, _context, state) do
     raise(
       RuntimeError,
-      "received invalid caps on pad #{inspect(pad)}, expected: #{inspect(state.caps)}, got: #{inspect(caps)}"
+      "received invalid stream_format on pad #{inspect(pad)}, expected: #{inspect(state.stream_format)}, got: #{inspect(stream_format)}"
     )
   end
 
@@ -324,15 +325,15 @@ defmodule Membrane.AudioMixer do
     if size >= time_frame do
       {actions, state} = mix_and_get_actions(context, state)
       actions = if actions == [], do: [redemand: :output], else: actions
-      {{:ok, actions}, state}
+      {actions, state}
     else
-      {{:ok, redemand: :output}, state}
+      {[redemand: :output], state}
     end
   end
 
   defp initialize_mixer_state(nil, _state), do: nil
 
-  defp initialize_mixer_state(caps, state) do
+  defp initialize_mixer_state(stream_format, state) do
     mixer_module =
       if state.prevent_clipping do
         if state.native_mixer, do: NativeAdder, else: ClipPreventingAdder
@@ -340,7 +341,7 @@ defmodule Membrane.AudioMixer do
         Adder
       end
 
-    mixer_module.init(caps)
+    mixer_module.init(stream_format)
   end
 
   defp do_handle_demand(size, %{pads: pads} = state) do
@@ -350,18 +351,18 @@ defmodule Membrane.AudioMixer do
       |> byte_size()
       |> then(&{:demand, {pad, max(0, size - &1)}})
     end)
-    |> then(fn demands -> {{:ok, demands}, state} end)
+    |> then(fn demands -> {demands, state} end)
   end
 
-  defp mix_and_get_actions(context, %{caps: caps, pads: pads} = state) do
-    time_frame = RawAudio.frame_size(caps)
+  defp mix_and_get_actions(context, %{stream_format: stream_format, pads: pads} = state) do
+    time_frame = RawAudio.frame_size(stream_format)
     mix_size = get_mix_size(pads, time_frame)
 
     {payload, state} =
       if mix_size >= time_frame do
         {payload, pads, state} = mix(pads, mix_size, state)
         pads = remove_finished_pads(context, pads, time_frame)
-        mix_time = RawAudio.bytes_to_time(mix_size, caps)
+        mix_time = RawAudio.bytes_to_time(mix_size, stream_format)
         state = %{state | pads: pads, last_ts_sent: state.last_ts_sent + mix_time}
 
         {payload, state}
