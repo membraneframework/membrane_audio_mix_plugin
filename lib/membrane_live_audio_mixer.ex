@@ -23,7 +23,6 @@ defmodule Membrane.LiveAudioMixer do
   alias Membrane.Time
 
   def_options stream_format: [
-                type: :struct,
                 spec: RawAudio.t(),
                 description: """
                 The value defines a raw audio format of pads connected to the
@@ -32,7 +31,6 @@ defmodule Membrane.LiveAudioMixer do
                 default: nil
               ],
               frames_per_buffer: [
-                type: :integer,
                 spec: pos_integer(),
                 description: """
                 Assumed number of raw audio frames in each buffer.
@@ -41,7 +39,6 @@ defmodule Membrane.LiveAudioMixer do
                 default: 2048
               ],
               prevent_clipping: [
-                type: :boolean,
                 spec: boolean(),
                 description: """
                 Defines how the mixer should act in the case when an overflow happens.
@@ -53,7 +50,6 @@ defmodule Membrane.LiveAudioMixer do
                 default: true
               ],
               native_mixer: [
-                type: :boolean,
                 spec: boolean(),
                 description: """
                 The value determines if mixer should use NIFs for mixing audio. Only
@@ -62,34 +58,26 @@ defmodule Membrane.LiveAudioMixer do
                 """,
                 default: false
               ],
-              synchronize_buffers?: [
-                type: :boolean,
-                spec: boolean(),
-                description: """
-                The value determines if mixer should synchronize buffers based on pts values.
-                - If true, mixer will synchronize buffers based on its pts values. If buffer pts value is lower then the current
-                mixing time (last_ts_sent) it will be dropped.
-                - If false, mixer will take all incoming buffers no matter what pts they have and put it in the queue.
-                """,
-                default: false
+              latency: [
+                spec: non_neg_integer(),
+                description: "",
+                default: Membrane.Time.milliseconds(200)
               ]
 
   def_output_pad :output,
-    mode: :pull,
+    demand_mode: :auto,
     availability: :always,
     accepted_format: RawAudio
 
   def_input_pad :input,
-    mode: :pull,
+    demand_mode: :auto,
     availability: :on_request,
-    demand_unit: :bytes,
     accepted_format:
       any_of(
         %RawAudio{sample_format: sample_format}
         when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be],
         Membrane.RemoteStream
       ),
-    #
     options: [
       offset: [
         spec: Time.non_neg_t(),
@@ -103,29 +91,42 @@ defmodule Membrane.LiveAudioMixer do
     if options.native_mixer && !options.prevent_clipping do
       raise("Invalid element options, for native mixer only clipping preventing one is available")
     else
-      {:ok, live_queue_state} = LiveQueue.init(stream_format)
-
       state =
         options
         |> Map.from_struct()
         |> Map.put(:mixer_state, initialize_mixer_state(stream_format, options))
-        |> Map.put(:last_ts_sent, 0)
-        |> Map.put(:live_queue, live_queue_state)
+        |> Map.put(:live_queue, LiveQueue.init(stream_format))
 
       {[], state}
     end
   end
 
-  @impl true
-  def handle_playing(_context, %{stream_format: %RawAudio{} = stream_format} = state) do
-    {[
-       stream_format: {:output, stream_format},
-       start_timer: {:timer, Membrane.Time.milliseconds(100)}
-     ], state}
+  def handle_playing(_context, %{stream_format: stream_format} = state) do
+    {[stream_format: {:output, stream_format}], state}
   end
 
-  def handle_playing(_context, %{stream_format: nil} = state) do
-    {[start_timer: {:timer, Membrane.Time.milliseconds(100)}], state}
+  @impl true
+  def handle_pad_added(_pad, context, state) do
+    input_pads_number =
+      context.pads
+      |> Enum.filter(fn {_id, pad} -> pad.direction == :input end)
+      |> Enum.count()
+
+    if input_pads_number == 1 do
+      {[start_timer: {:initiator, state.latency}], state}
+    else
+      {[], state}
+    end
+  end
+
+  @impl true
+  def handle_stream_format(
+        _pad,
+        stream_format,
+        _context,
+        %{stream_format: _stream_format} = state
+      ) do
+    {[], state}
   end
 
   @impl true
@@ -136,14 +137,14 @@ defmodule Membrane.LiveAudioMixer do
       ) do
     offset = context.pads[pad].options.offset
 
-    {:ok, new_live_queue} = LiveQueue.add_queue(pad_id, offset, live_queue)
+    {:ok, new_live_queue} = LiveQueue.add_queue(live_queue, pad_id, offset)
 
     {[], %{state | live_queue: new_live_queue}}
   end
 
   @impl true
   def handle_end_of_stream(Pad.ref(:input, pad_id), context, %{live_queue: live_queue} = state) do
-    {:ok, new_live_queue} = LiveQueue.remove_queue(pad_id, live_queue)
+    {:ok, new_live_queue} = LiveQueue.remove_queue(live_queue, pad_id)
 
     actions =
       if all_streams_ended?(context) do
@@ -162,24 +163,19 @@ defmodule Membrane.LiveAudioMixer do
         _context,
         %{live_queue: live_queue} = state
       ) do
-    {:ok, new_live_queue} = LiveQueue.add_buffer(pad_id, buffer, live_queue)
+    {:ok, new_live_queue} = LiveQueue.add_buffer(live_queue, pad_id, buffer)
 
     {[], %{state | live_queue: new_live_queue}}
   end
 
   @impl true
-  def handle_tick(_timer_id, _context, state) do
-    {payload, state} = mix(Membrane.Time.milliseconds(100), state)
-    {[buffer: {:output, %Buffer{payload: payload}}], state}
+  def handle_tick(:initiator, _context, state) do
+    {[stop_timer: :initiator, start_timer: {:timer, 20 |> Membrane.Time.milliseconds()}], state}
   end
 
-  @impl true
-  def handle_stream_format(_pad, stream_format, _context, %{stream_format: nil} = state) do
-    state = %{state | stream_format: stream_format}
-    mixer_state = initialize_mixer_state(stream_format, state)
-
-    {[stream_format: {:output, stream_format}, redemand: :output],
-     %{state | mixer_state: mixer_state}}
+  def handle_tick(:timer, _context, state) do
+    {payload, state} = mix(20 |> Membrane.Time.milliseconds(), state)
+    {[buffer: {:output, %Buffer{payload: payload}}], state}
   end
 
   defp initialize_mixer_state(nil, _state), do: nil
@@ -196,7 +192,7 @@ defmodule Membrane.LiveAudioMixer do
   end
 
   defp mix(duration, %{live_queue: live_queue} = state) do
-    {payloads, new_live_queue} = LiveQueue.get_audio(duration, live_queue)
+    {payloads, new_live_queue} = LiveQueue.get_audio(live_queue, duration)
     payloads = Enum.map(payloads, fn {_audio_id, payload} -> payload end)
     {payload, state} = mix_payloads(payloads, state)
     {payload, %{state | live_queue: new_live_queue}}
