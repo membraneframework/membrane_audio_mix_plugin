@@ -6,8 +6,7 @@ defmodule Membrane.LiveAudioMixer do
   received stream_format have to be identical and match ones in element option (if that option is
   different from `nil`).
 
-  Input pads can have offset - it tells how much silence should be added before first sample
-  from that pad. Offset has to be positive.
+  Input pads can have offset - it tells how much timestamps differ from mixer time.
 
   Mixer mixes only raw audio (PCM), so some parser may be needed to precede it in pipeline.
   """
@@ -29,14 +28,6 @@ defmodule Membrane.LiveAudioMixer do
                 element. It should be the same for all the pads.
                 """,
                 default: nil
-              ],
-              frames_per_buffer: [
-                spec: pos_integer(),
-                description: """
-                Assumed number of raw audio frames in each buffer.
-                Used when converting demand from buffers into bytes.
-                """,
-                default: 2048
               ],
               prevent_clipping: [
                 spec: boolean(),
@@ -60,8 +51,13 @@ defmodule Membrane.LiveAudioMixer do
               ],
               latency: [
                 spec: non_neg_integer(),
-                description: "",
-                default: Membrane.Time.milliseconds(200)
+                description: """
+                The value determines after what time the clock will start interval that mixes audio in real time.
+                Latency is crucial to quality of output audio, the smaller the value, the more packets will be lost.
+                But the biggest the value, the latency of the stream is bigger.
+                """,
+                default: Membrane.Time.milliseconds(200),
+                inspector: &Time.inspect/1
               ]
 
   def_output_pad :output,
@@ -75,8 +71,7 @@ defmodule Membrane.LiveAudioMixer do
     accepted_format:
       any_of(
         %RawAudio{sample_format: sample_format}
-        when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be],
-        Membrane.RemoteStream
+        when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be]
       ),
     options: [
       offset: [
@@ -101,6 +96,7 @@ defmodule Membrane.LiveAudioMixer do
     end
   end
 
+  @impl true
   def handle_playing(_context, %{stream_format: stream_format} = state) do
     {[stream_format: {:output, stream_format}], state}
   end
@@ -120,13 +116,24 @@ defmodule Membrane.LiveAudioMixer do
   end
 
   @impl true
-  def handle_stream_format(
-        _pad,
-        stream_format,
-        _context,
-        %{stream_format: _stream_format} = state
-      ) do
+  def handle_stream_format(_pad, stream_format, _context, %{stream_format: nil} = state) do
+    state = %{state | stream_format: stream_format}
+    mixer_state = initialize_mixer_state(stream_format, state)
+
+    {[stream_format: {:output, stream_format}], %{state | mixer_state: mixer_state}}
+  end
+
+  @impl true
+  def handle_stream_format(_pad, stream_format, _context, %{stream_format: stream_format} = state) do
     {[], state}
+  end
+
+  @impl true
+  def handle_stream_format(pad, stream_format, _context, state) do
+    raise(
+      RuntimeError,
+      "received invalid stream_format on pad #{inspect(pad)}, expected: #{inspect(state.stream_format)}, got: #{inspect(stream_format)}"
+    )
   end
 
   @impl true
