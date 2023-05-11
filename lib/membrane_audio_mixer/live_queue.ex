@@ -10,7 +10,6 @@ defmodule Membrane.AudioMixer.LiveQueue do
   The LIveQueue has an independent queue for each stream, all the “holes” caused by late or dropped packets are filled with silence.
   If there is a need for more audio than there is in a queue, the missing part will be replaced by silence.
   """
-  alias Membrane.AudioMixer.LiveQueue.Membrane.AudioMixer.LiveQueue.Queue
   alias Membrane.RawAudio
 
   defmodule Queue do
@@ -51,7 +50,7 @@ defmodule Membrane.AudioMixer.LiveQueue do
   If the queue is empty, it will be removed right away.
   Otherwise, it will be marked as `draining` and will be removed when it will get empty.
   """
-  @spec remove_queue(t(), any()) :: {:ok, t()} | {:error, String.t()}
+  @spec remove_queue(t(), any()) :: t()
   def remove_queue(lq, id) do
     if get_in(lq, [:queues, id]) != nil do
       queue = lq.queues[id]
@@ -62,11 +61,11 @@ defmodule Membrane.AudioMixer.LiveQueue do
 
         queue.buffer_duration == 0 ->
           {_queue, lq} = pop_in(lq, [:queues, id])
-          {:ok, lq}
+          lq
 
         true ->
           lq = update_in(lq, [:queues, id], &Map.put(&1, :draining?, true))
-          {:ok, lq}
+          lq
       end
     else
       raise "Queue with id: '#{id}' doesn't exists"
@@ -109,8 +108,7 @@ defmodule Membrane.AudioMixer.LiveQueue do
 
   The state of the buffer, whether it's too old or not, is based on LiveQueue's `current_time`.
   """
-  @spec add_buffer(t(), any(), Membrane.Buffer.t()) ::
-          {:ok, t()} | {:error, String.t()}
+  @spec add_buffer(t(), any(), Membrane.Buffer.t()) :: t()
   def add_buffer(
         %{
           stream_format: stream_format,
@@ -127,9 +125,6 @@ defmodule Membrane.AudioMixer.LiveQueue do
     queue_ts = current_time + queue.buffer_duration
 
     case {pts > queue_ts, end_pts > queue_ts} do
-      {false, false} ->
-        {:ok, lq}
-
       {false, true} ->
         drop_duration = queue_ts - pts
         drop_bytes = RawAudio.time_to_bytes(drop_duration, stream_format)
@@ -144,7 +139,7 @@ defmodule Membrane.AudioMixer.LiveQueue do
             |> Map.update!(:buffer_duration, &(&1 + to_add_duration))
           end)
 
-        {:ok, new_lq}
+        new_lq
 
       {true, true} ->
         silence_duration = pts - queue_ts
@@ -157,10 +152,10 @@ defmodule Membrane.AudioMixer.LiveQueue do
             |> Map.update!(:buffer_duration, &(&1 + silence_duration + payload_duration))
           end)
 
-        {:ok, new_lq}
+        new_lq
 
       _else ->
-        {:error, lq}
+        lq
     end
   end
 
