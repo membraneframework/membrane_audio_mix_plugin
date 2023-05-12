@@ -296,7 +296,7 @@ defmodule Membrane.AudioMixer do
         _pad,
         %Membrane.RemoteStream{} = _input_stream_format,
         _context,
-        %{input_stream_format: nil} = _state
+        %{stream_format: nil} = _state
       ) do
     raise """
     You need to specify `stream_format` in options if `Membrane.RemoteStream` will be received on the `:input` pad

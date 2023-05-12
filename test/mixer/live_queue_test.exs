@@ -19,7 +19,6 @@ defmodule Membrane.LiveAudioMixer.LiveQueueTest do
 
   setup do
     live_queue = LiveQueue.init(@stream_format)
-
     %{live_queue: live_queue}
   end
 
@@ -70,7 +69,9 @@ defmodule Membrane.LiveAudioMixer.LiveQueueTest do
     end
   end
 
-  test "adding", %{live_queue: live_queue} do
+  test "Live Queue should add and remove buffers as described in the element", %{
+    live_queue: live_queue
+  } do
     live_queue = LiveQueue.add_queue(live_queue, 1)
     live_queue = LiveQueue.add_buffer(live_queue, 1, %Buffer{pts: 0, payload: @sound_100})
 

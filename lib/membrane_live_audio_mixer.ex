@@ -1,6 +1,6 @@
 defmodule Membrane.LiveAudioMixer do
   @moduledoc """
-  This element performs audio mixing.
+  This element performs audio mixing for live streams.
 
   Audio format can be set as an element option or received through stream_format from input pads. All
   received stream_format have to be identical and match ones in element option (if that option is
@@ -20,6 +20,8 @@ defmodule Membrane.LiveAudioMixer do
   alias Membrane.Buffer
   alias Membrane.RawAudio
   alias Membrane.Time
+
+  @interval Membrane.Time.milliseconds(20)
 
   def_options stream_format: [
                 spec: RawAudio.t(),
@@ -86,41 +88,39 @@ defmodule Membrane.LiveAudioMixer do
     if options.native_mixer && !options.prevent_clipping do
       raise("Invalid element options, for native mixer only clipping preventing one is available")
     else
+      live_queue =
+        if stream_format == nil,
+          do: nil,
+          else: LiveQueue.init(stream_format)
+
       state =
         options
         |> Map.from_struct()
         |> Map.put(:mixer_state, initialize_mixer_state(stream_format, options))
-        |> Map.put(:live_queue, LiveQueue.init(stream_format))
+        |> Map.put(:live_queue, live_queue)
+        |> Map.put(:end_of_stream?, false)
 
       {[], state}
     end
   end
 
   @impl true
-  def handle_playing(_context, %{stream_format: stream_format} = state) do
+  def handle_playing(_context, %{stream_format: %RawAudio{} = stream_format} = state) do
     {[stream_format: {:output, stream_format}], state}
   end
 
-  @impl true
-  def handle_pad_added(_pad, context, state) do
-    input_pads_number =
-      context.pads
-      |> Enum.filter(fn {_id, pad} -> pad.direction == :input end)
-      |> Enum.count()
-
-    if input_pads_number == 1 do
-      {[start_timer: {:initiator, state.latency}], state}
-    else
-      {[], state}
-    end
+  def handle_playing(_context, %{stream_format: nil} = state) do
+    {[], state}
   end
 
   @impl true
   def handle_stream_format(_pad, stream_format, _context, %{stream_format: nil} = state) do
     state = %{state | stream_format: stream_format}
     mixer_state = initialize_mixer_state(stream_format, state)
+    live_queue = LiveQueue.init(stream_format)
 
-    {[stream_format: {:output, stream_format}], %{state | mixer_state: mixer_state}}
+    {[stream_format: {:output, stream_format}],
+     %{state | mixer_state: mixer_state, live_queue: live_queue}}
   end
 
   @impl true
@@ -144,21 +144,17 @@ defmodule Membrane.LiveAudioMixer do
       ) do
     offset = context.pads[pad].options.offset
 
-    {:ok, new_live_queue} = LiveQueue.add_queue(live_queue, pad_id, offset)
+    new_live_queue = LiveQueue.add_queue(live_queue, pad_id, offset)
 
-    {[], %{state | live_queue: new_live_queue}}
-  end
-
-  @impl true
-  def handle_end_of_stream(Pad.ref(:input, pad_id), context, %{live_queue: live_queue} = state) do
-    {:ok, new_live_queue} = LiveQueue.remove_queue(live_queue, pad_id)
+    started_input_pads_number =
+      context.pads
+      |> Enum.filter(fn {_id, pad} -> pad.direction == :input and pad.start_of_stream? == true end)
+      |> Enum.count()
 
     actions =
-      if all_streams_ended?(context) do
-        [{:end_of_stream, :output}]
-      else
-        []
-      end
+      if started_input_pads_number == 1,
+        do: [start_timer: {:initiator, state.latency}],
+        else: []
 
     {actions, %{state | live_queue: new_live_queue}}
   end
@@ -170,19 +166,53 @@ defmodule Membrane.LiveAudioMixer do
         _context,
         %{live_queue: live_queue} = state
       ) do
-    {:ok, new_live_queue} = LiveQueue.add_buffer(live_queue, pad_id, buffer)
+    new_live_queue = LiveQueue.add_buffer(live_queue, pad_id, buffer)
 
     {[], %{state | live_queue: new_live_queue}}
   end
 
   @impl true
-  def handle_tick(:initiator, _context, state) do
-    {[stop_timer: :initiator, start_timer: {:timer, 20 |> Membrane.Time.milliseconds()}], state}
+  def handle_end_of_stream(Pad.ref(:input, pad_id), context, %{live_queue: live_queue} = state) do
+    new_live_queue = LiveQueue.remove_queue(live_queue, pad_id)
+
+    {actions, end_of_stream?, state} =
+      cond do
+        !all_streams_ended?(context) ->
+          {[], false, state}
+
+        LiveQueue.all_queues_empty?(new_live_queue) ->
+          {payload, state} = flush_mixer(state)
+
+          {[
+             buffer: {:output, %Buffer{payload: payload}},
+             end_of_stream: :output,
+             stop_timer: :timer
+           ], true, state}
+
+        true ->
+          {[], true, state}
+      end
+
+    {actions, %{state | live_queue: new_live_queue, end_of_stream?: end_of_stream?}}
   end
 
-  def handle_tick(:timer, _context, state) do
+  @impl true
+  def handle_tick(:initiator, _context, state) do
+    {[stop_timer: :initiator, start_timer: {:timer, @interval}], state}
+  end
+
+  def handle_tick(:timer, _context, %{end_of_stream?: end_of_stream?} = state) do
     {payload, state} = mix(20 |> Membrane.Time.milliseconds(), state)
-    {[buffer: {:output, %Buffer{payload: payload}}], state}
+
+    {actions, payload, state} =
+      if end_of_stream? and LiveQueue.all_queues_empty?(state.live_queue) do
+        {flushed_payload, state} = flush_mixer(state)
+        {[end_of_stream: :output, stop_timer: :timer], payload <> flushed_payload, state}
+      else
+        {[], payload, state}
+      end
+
+    {[buffer: {:output, %Buffer{payload: payload}}] ++ actions, state}
   end
 
   defp initialize_mixer_state(nil, _state), do: nil
@@ -214,6 +244,12 @@ defmodule Membrane.LiveAudioMixer do
 
   defp mix_payloads(payloads, %{mixer_state: %module{} = mixer_state} = state) do
     {payload, mixer_state} = module.mix(payloads, mixer_state)
+    state = %{state | mixer_state: mixer_state}
+    {payload, state}
+  end
+
+  defp flush_mixer(%{mixer_state: %module{} = mixer_state} = state) do
+    {payload, mixer_state} = module.flush(mixer_state)
     state = %{state | mixer_state: mixer_state}
     {payload, state}
   end
