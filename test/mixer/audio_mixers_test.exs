@@ -50,7 +50,9 @@ defmodule Membrane.AudioMixersTest do
         |> Enum.concat([child(:file_sink, %Membrane.File.Sink{location: output_path})])
 
       {mixer, preventer_mixer, native_mixer} =
-        if live_mixer?, do: all_live_mixers(stream_format), else: all_offline_mixers(stream_format)
+        if live_mixer?,
+          do: all_live_mixers(stream_format),
+          else: all_offline_mixers(stream_format)
 
       {
         base_elements ++ [child(:mixer, mixer)],

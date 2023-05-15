@@ -1,6 +1,6 @@
 defmodule Membrane.AudioMixer.Support.NetworkSimulator do
   @moduledoc false
-  
+
   use Membrane.Filter
 
   def_options drop_every_other_packet: [
