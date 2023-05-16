@@ -1,5 +1,7 @@
 defmodule Membrane.AudioMixer.Support.RawAudioParser do
-  @moduledoc false
+  @moduledoc """
+  This element is responsible for adding timestamps to buffers.
+  """
 
   use Membrane.Filter
 

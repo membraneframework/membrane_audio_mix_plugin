@@ -51,8 +51,8 @@ defmodule Membrane.AudioMixersTest do
 
       {mixer, preventer_mixer, native_mixer} =
         if live_mixer?,
-          do: all_live_mixers(stream_format),
-          else: all_offline_mixers(stream_format)
+          do: get_live_mixers(stream_format),
+          else: get_offline_mixers(stream_format)
 
       {
         base_elements ++ [child(:mixer, mixer)],
@@ -61,7 +61,7 @@ defmodule Membrane.AudioMixersTest do
       }
     end
 
-    defp all_live_mixers(stream_format) do
+    defp get_live_mixers(stream_format) do
       mixer = %Membrane.LiveAudioMixer{
         stream_format: stream_format,
         prevent_clipping: false
@@ -73,7 +73,7 @@ defmodule Membrane.AudioMixersTest do
       {mixer, preventer_mixer, native_mixer}
     end
 
-    defp all_offline_mixers(stream_format) do
+    defp get_offline_mixers(stream_format) do
       mixer = %Membrane.AudioMixer{
         stream_format: stream_format,
         prevent_clipping: false
@@ -107,6 +107,9 @@ defmodule Membrane.AudioMixersTest do
       assert {:ok, output_file} = File.read(output_path)
 
       if live_mixer? do
+        # Live audio mixer produces audio chunks in intervals.
+        # Each tick produces the same amount of audio.
+        # So before eof stream live mixer can produce additional silence.
         assert <<_output_match::binary-size(byte_size(reference_file)), _rest::binary>> =
                  output_file
       else

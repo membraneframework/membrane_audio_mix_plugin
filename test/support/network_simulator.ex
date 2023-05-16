@@ -1,14 +1,22 @@
 defmodule Membrane.AudioMixer.Support.NetworkSimulator do
-  @moduledoc false
+  @moduledoc """
+  This element is responsible for the simulation of real network communication.
+  """
 
   use Membrane.Filter
 
   def_options drop_every_other_packet: [
                 spec: boolean(),
+                description: """
+                If set to true, every other packet will be dropped.
+                """,
                 default: false
               ],
               latency: [
                 spec: Membrane.Time.t() | nil,
+                description: """
+                If value is different than `nil`, every packet will randomize a delay from 0 to `latency`.
+                """,
                 default: nil
               ]
 

@@ -37,7 +37,7 @@ defmodule Membrane.LiveAudioMixer.LiveQueueTest do
       live_queue = LiveQueue.add_queue(live_queue, 1)
       live_queue = LiveQueue.add_queue(live_queue, 2)
 
-      # remove empty queue - should be removed instantly from state
+      # removing empty queue - should be removed instantly from state
       live_queue = LiveQueue.remove_queue(live_queue, 1)
       {audios, live_queue} = LiveQueue.get_audio(live_queue, @hundred_ms)
       assert [{2, @silence_100}] = audios
@@ -45,7 +45,7 @@ defmodule Membrane.LiveAudioMixer.LiveQueueTest do
       live_queue =
         LiveQueue.add_buffer(live_queue, 2, %Buffer{pts: @hundred_ms, payload: @silence_100})
 
-      # remove not empty queue - should be marked as finished and removed when it gets empty
+      # removing not empty queue - should be marked as finished and removed when it gets empty
       live_queue = LiveQueue.remove_queue(live_queue, 2)
       {audios, live_queue} = LiveQueue.get_audio(live_queue, @hundred_ms)
       assert [{2, @silence_100}] == audios
@@ -62,7 +62,7 @@ defmodule Membrane.LiveAudioMixer.LiveQueueTest do
       assert LiveQueue.all_queues_empty?(live_queue)
 
       live_queue = LiveQueue.add_buffer(live_queue, 1, %Buffer{pts: 0, payload: @silence_100})
-      assert !LiveQueue.all_queues_empty?(live_queue)
+      assert not LiveQueue.all_queues_empty?(live_queue)
 
       {_audio, live_queue} = LiveQueue.get_audio(live_queue, @hundred_ms)
       assert LiveQueue.all_queues_empty?(live_queue)
@@ -79,12 +79,12 @@ defmodule Membrane.LiveAudioMixer.LiveQueueTest do
     audio = @sound_100 <> @silence_100
     assert [{1, audio}] == audios
 
-    # Add buffer that is to old, should not change anything
+    # Adding buffer that is too old should not change anything
     live_queue = LiveQueue.add_buffer(live_queue, 1, %Buffer{pts: 0, payload: @sound_100})
     {audios, live_queue} = LiveQueue.get_audio(live_queue, @hundred_ms)
     assert [{1, @silence_100}] == audios
 
-    # Add buffer that has half of the payload to old to use, should add only half of the buffer (50ms)
+    # Adding buffer that has half of the payload too old to use should add only half of the buffer (50ms)
     buffer_pts = 2 * @hundred_ms + @fifty_ms
 
     live_queue =
@@ -94,7 +94,7 @@ defmodule Membrane.LiveAudioMixer.LiveQueueTest do
     audio = @sound_50 <> @silence_50
     assert [{1, audio}] == audios
 
-    # Add buffer that is ahead of queue payload by 50 ms, should add 50 ms of silence than whole buffer payload
+    # Adding buffer that is ahead of queue payload by 50 ms should add 50 ms of silence than whole buffer payload
     buffer_pts = Time.milliseconds(500)
 
     live_queue =
@@ -104,7 +104,7 @@ defmodule Membrane.LiveAudioMixer.LiveQueueTest do
     audio = @silence_100 <> @sound_100
     assert [{1, audio}] == audios
 
-    # Add second queue
+    # Adding second queue
     live_queue = LiveQueue.add_queue(live_queue, 2, 6 * @hundred_ms)
     live_queue = LiveQueue.add_buffer(live_queue, 2, %Buffer{pts: 0, payload: @sound_100})
     {audios, _live_queue} = LiveQueue.get_audio(live_queue, @hundred_ms)

@@ -177,7 +177,7 @@ defmodule Membrane.LiveAudioMixer do
 
     {actions, end_of_stream?, state} =
       cond do
-        !all_streams_ended?(context) ->
+        not all_streams_ended?(context) ->
           {[], false, state}
 
         LiveQueue.all_queues_empty?(new_live_queue) ->
@@ -189,6 +189,9 @@ defmodule Membrane.LiveAudioMixer do
              stop_timer: :timer
            ], true, state}
 
+        #  All streams ended but queues are not empty.
+        #  Set `end_of_stream?` to true.
+        #  Handle tick will send `end_of_stream` when all queues will be empty.
         true ->
           {[], true, state}
       end
@@ -202,7 +205,7 @@ defmodule Membrane.LiveAudioMixer do
   end
 
   def handle_tick(:timer, _context, %{end_of_stream?: end_of_stream?} = state) do
-    {payload, state} = mix(20 |> Membrane.Time.milliseconds(), state)
+    {payload, state} = mix(@interval, state)
 
     {actions, payload, state} =
       if end_of_stream? and LiveQueue.all_queues_empty?(state.live_queue) do

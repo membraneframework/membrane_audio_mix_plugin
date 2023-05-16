@@ -1,14 +1,14 @@
 defmodule Membrane.AudioMixer.LiveQueue do
   @moduledoc """
-  This module provides a library for audio mixers that work with live streams.
+  There are a lot of problems that the mixer can encounter while processing live audio streams:
+  * packet loss resulting in small stream discontinuity
+  * connection issues resulting in  complete lack of data
+  * the need for enforcing max latency on the stream - packets that come too late have to be dropped
 
-  There are a lot of problems that a mixer can encounter while processing live audio streams.
-  * packets can be lost which will result in the lack of continuity of the stream.
-  * sometimes there is a problem with communication and there won’t be any packets from some streamer for a few seconds.
-  * In the live stream, we want to be able to force some maximum latency and that will result in some packets that will be too old and has to be dropped.
-  The LiveQueue is a tool for storing audio streams that handle all the problems mentioned above.
-  The LIveQueue has an independent queue for each stream, all the “holes” caused by late or dropped packets are filled with silence.
-  If there is a need for more audio than there is in a queue, the missing part will be replaced by silence.
+  The LiveQueue tackles all those problems.
+  It has an independent queue for each stream.
+  Every gap caused by late or dropped packets are filled with silence.
+  If there is a need for more audio than there is in a queue, the missing part will also be filled with silence.
   """
   alias Membrane.RawAudio
 
@@ -47,28 +47,27 @@ defmodule Membrane.AudioMixer.LiveQueue do
   end
 
   @doc """
+  Removes queue from a live queue.
+
   If the queue is empty, it will be removed right away.
   Otherwise, it will be marked as `draining` and will be removed when it will get empty.
   """
   @spec remove_queue(t(), any()) :: t()
   def remove_queue(lq, id) do
-    if get_in(lq, [:queues, id]) != nil do
-      queue = lq.queues[id]
+    if not Map.has_key?(lq.queues, id), do: raise("Queue with id: '#{id}' doesn't exists")
 
-      cond do
-        queue.draining? ->
-          raise "Queue with id: '#{id}' is already marked as draining"
+    queue = lq.queues[id]
 
-        queue.buffer_duration == 0 ->
-          {_queue, lq} = pop_in(lq, [:queues, id])
-          lq
+    cond do
+      queue.draining? ->
+        raise "Queue with id: '#{id}' is already marked as draining"
 
-        true ->
-          lq = update_in(lq, [:queues, id], &Map.put(&1, :draining?, true))
-          lq
-      end
-    else
-      raise "Queue with id: '#{id}' doesn't exists"
+      queue.buffer_duration == 0 ->
+        {_queue, lq} = pop_in(lq, [:queues, id])
+        lq
+
+      true ->
+        update_in(lq, [:queues, id], &Map.put(&1, :draining?, true))
     end
   end
 
@@ -101,10 +100,12 @@ defmodule Membrane.AudioMixer.LiveQueue do
   end
 
   @doc """
+  Adds to a specific queue.
+
   When a buffer is too old it will be dropped
-  When part of a buffer is too old, the part of the buffer that is too old will be dropped and the rest will be added to the back of the queue.
-  When a buffer is "fresh", the whole buffer will be added.
-  In the case of a “whole” between the end of the queue and the beginning of the buffer, the difference will be filled with silence.
+  When a part of a buffer is too old, only the part that is "fresh" will be added.
+  When a whole buffer is "fresh", the whole buffer will be added.
+  All the wholes between audio packets will be filled with silence.
 
   The state of the buffer, whether it's too old or not, is based on LiveQueue's `current_time`.
   """
@@ -132,14 +133,11 @@ defmodule Membrane.AudioMixer.LiveQueue do
 
         to_add_duration = payload_duration - drop_duration
 
-        new_lq =
-          update_in(lq, [:queues, id], fn queue ->
-            queue
-            |> Map.update!(:buffer, &(&1 <> to_add))
-            |> Map.update!(:buffer_duration, &(&1 + to_add_duration))
-          end)
-
-        new_lq
+        update_in(lq, [:queues, id], fn queue ->
+          queue
+          |> Map.update!(:buffer, &(&1 <> to_add))
+          |> Map.update!(:buffer_duration, &(&1 + to_add_duration))
+        end)
 
       {true, true} ->
         silence_duration = pts - queue_ts
