@@ -16,8 +16,9 @@ defmodule Membrane.LiveAudioMixer do
 
   require Membrane.Logger
 
-  alias Membrane.AudioMixer.{Adder, ClipPreventingAdder, LiveQueue, NativeAdder}
+  alias Membrane.AudioMixer.{Adder, ClipPreventingAdder, NativeAdder}
   alias Membrane.Buffer
+  alias Membrane.LiveAudioMixer.LiveQueue
   alias Membrane.RawAudio
   alias Membrane.Time
 

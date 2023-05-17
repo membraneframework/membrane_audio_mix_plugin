@@ -1,4 +1,4 @@
-defmodule Membrane.AudioMixer.LiveQueue do
+defmodule Membrane.LiveAudioMixer.LiveQueue do
   @moduledoc """
   There are a lot of problems that the mixer can encounter while processing live audio streams:
   * packet loss resulting in small stream discontinuity
