@@ -23,15 +23,7 @@ defmodule Membrane.LiveAudioMixer do
 
   @interval Membrane.Time.milliseconds(20)
 
-  def_options stream_format: [
-                spec: RawAudio.t(),
-                description: """
-                The value defines a raw audio format of pads connected to the
-                element. It should be the same for all the pads.
-                """,
-                default: nil
-              ],
-              prevent_clipping: [
+  def_options prevent_clipping: [
                 spec: boolean(),
                 description: """
                 Defines how the mixer should act in the case when an overflow happens.
@@ -84,33 +76,20 @@ defmodule Membrane.LiveAudioMixer do
     ]
 
   @impl true
-  def handle_init(_ctx, %__MODULE__{stream_format: stream_format} = options) do
+  def handle_init(_ctx, options) do
     if options.native_mixer && !options.prevent_clipping do
       raise("Invalid element options, for native mixer only clipping preventing one is available")
     else
-      live_queue =
-        if stream_format == nil,
-          do: nil,
-          else: LiveQueue.init(stream_format)
-
       state =
         options
         |> Map.from_struct()
-        |> Map.put(:mixer_state, initialize_mixer_state(stream_format, options))
-        |> Map.put(:live_queue, live_queue)
+        |> Map.put(:mixer_state, nil)
+        |> Map.put(:live_queue, nil)
+        |> Map.put(:stream_format, nil)
         |> Map.put(:end_of_stream?, false)
 
       {[], state}
     end
-  end
-
-  @impl true
-  def handle_playing(_context, %{stream_format: %RawAudio{} = stream_format} = state) do
-    {[stream_format: {:output, stream_format}], state}
-  end
-
-  def handle_playing(_context, %{stream_format: nil} = state) do
-    {[], state}
   end
 
   @impl true

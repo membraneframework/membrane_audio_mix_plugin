@@ -89,7 +89,6 @@ defmodule Membrane.AudioMixer do
         when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be],
         Membrane.RemoteStream
       ),
-    #
     options: [
       offset: [
         spec: Time.non_neg_t(),
