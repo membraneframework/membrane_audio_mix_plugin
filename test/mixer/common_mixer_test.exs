@@ -1,4 +1,4 @@
-defmodule Membrane.CustomMixerTest do
+defmodule Membrane.CommonMixerTest do
   @moduledoc false
 
   use ExUnit.Case
