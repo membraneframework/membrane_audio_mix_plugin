@@ -293,7 +293,7 @@ defmodule Membrane.AudioMixer do
   @impl true
   def handle_stream_format(
         _pad,
-        %Membrane.RemoteStream{} = _input_stream_format,
+        %Membrane.RemoteStream{} = _input_stream,
         _context,
         %{stream_format: nil} = _state
       ) do
@@ -308,7 +308,7 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_stream_format(_pad, %Membrane.RemoteStream{} = _input_stream_format, _context, state) do
+  def handle_stream_format(_pad, %Membrane.RemoteStream{} = _input_stream, _context, state) do
     {[], state}
   end
 
