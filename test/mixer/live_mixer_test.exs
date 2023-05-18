@@ -64,6 +64,7 @@ defmodule Membrane.LiveAudioMixerTest do
       |> get_child({:parser, 1})
       |> get_child({:realtimer, 1})
       |> get_child({:network_sim, 1})
+      |> via_in(Pad.ref(:input, 1))
       |> get_child(:mixer)
       |> get_child(:file_sink),
       get_child({:file_src, 2})
@@ -71,11 +72,17 @@ defmodule Membrane.LiveAudioMixerTest do
       |> get_child({:parser, 2})
       |> get_child({:realtimer, 2})
       |> get_child({:network_sim, 2})
+      |> via_in(Pad.ref(:input, 2))
       |> get_child(:mixer)
     ]
 
   defp perform_test(structure, output_path) do
     assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
+
+    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     assert {:ok, output_file} = File.read(output_path)

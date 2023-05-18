@@ -22,10 +22,12 @@ defmodule Membrane.CommonMixerTest do
       links = [
         get_child({:file_src, 1})
         |> get_child({:parser, 1})
+        |> via_in(Pad.ref(:input, 1))
         |> get_child(:mixer)
         |> get_child(:file_sink),
         get_child({:file_src, 2})
         |> get_child({:parser, 2})
+        |> via_in(Pad.ref(:input, 2))
         |> get_child(:mixer)
       ]
 
@@ -78,10 +80,12 @@ defmodule Membrane.CommonMixerTest do
       links = [
         get_child({:file_src, 1})
         |> get_child({:parser, 1})
+        |> via_in(Pad.ref(:input, 1))
         |> get_child(:mixer)
         |> get_child(:file_sink),
         get_child({:file_src, 2})
         |> get_child({:parser, 2})
+        |> via_in(Pad.ref(:input, 2))
         |> get_child(:mixer)
       ]
 
@@ -131,11 +135,12 @@ defmodule Membrane.CommonMixerTest do
       links = [
         get_child({:file_src, 1})
         |> get_child({:parser, 1})
-        |> via_in(:input, options: [offset: Membrane.Time.microseconds(125)])
+        |> via_in(Pad.ref(:input, 1), options: [offset: Membrane.Time.microseconds(125)])
         |> get_child(:mixer)
         |> get_child(:file_sink),
         get_child({:file_src, 2})
         |> get_child({:parser, 2})
+        |> via_in(Pad.ref(:input, 2))
         |> get_child(:mixer)
       ]
 
@@ -185,11 +190,12 @@ defmodule Membrane.CommonMixerTest do
       links = [
         get_child({:file_src, 1})
         |> get_child({:parser, 1})
+        |> via_in(Pad.ref(:input, 1))
         |> get_child(:mixer)
         |> get_child(:file_sink),
         get_child({:file_src, 2})
         |> get_child({:parser, 2})
-        |> via_in(:input, options: [offset: Membrane.Time.microseconds(250)])
+        |> via_in(Pad.ref(:input, 2), options: [offset: Membrane.Time.microseconds(250)])
         |> get_child(:mixer)
       ]
 
@@ -239,12 +245,12 @@ defmodule Membrane.CommonMixerTest do
       links = [
         get_child({:file_src, 1})
         |> get_child({:parser, 1})
-        |> via_in(:input, options: [offset: Membrane.Time.microseconds(500)])
+        |> via_in(Pad.ref(:input, 1), options: [offset: Membrane.Time.microseconds(500)])
         |> get_child(:mixer)
         |> get_child(:file_sink),
         get_child({:file_src, 2})
         |> get_child({:parser, 2})
-        |> via_in(:input, options: [offset: Membrane.Time.microseconds(125)])
+        |> via_in(Pad.ref(:input, 2), options: [offset: Membrane.Time.microseconds(125)])
         |> get_child(:mixer)
       ]
 
@@ -296,15 +302,16 @@ defmodule Membrane.CommonMixerTest do
       links = [
         get_child({:file_src, 1})
         |> get_child({:parser, 1})
+        |> via_in(Pad.ref(:input, 1))
         |> get_child(:mixer)
         |> get_child(:file_sink),
         get_child({:file_src, 2})
         |> get_child({:parser, 2})
-        |> via_in(:input, options: [offset: Membrane.Time.microseconds(250)])
+        |> via_in(Pad.ref(:input, 2), options: [offset: Membrane.Time.microseconds(250)])
         |> get_child(:mixer),
         get_child({:file_src, 3})
         |> get_child({:parser, 3})
-        |> via_in(:input, options: [offset: Membrane.Time.microseconds(125)])
+        |> via_in(Pad.ref(:input, 3), options: [offset: Membrane.Time.microseconds(125)])
         |> get_child(:mixer)
       ]
 
@@ -407,22 +414,35 @@ defmodule Membrane.CommonMixerTest do
     do_perform_test(native_elements ++ links, preventer_reference, output_path, live_mixer?)
   end
 
-  defp do_perform_test(structure, reference_path, output_path, live_mixer?) do
+  defp do_perform_test(structure, reference_path, output_path, false) do
     assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
+
+    assert {:ok, reference_file} = File.read(reference_path)
+    assert {:ok, output_file} = File.read(output_path)
+    assert reference_file == output_file
+  end
+
+  defp do_perform_test(structure, reference_path, output_path, true) do
+    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
+
+    # eight is a number of elements when there are three inputs
+    if Enum.count(structure) == 8,
+      do: assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 3))
+
+    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
 
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     assert {:ok, reference_file} = File.read(reference_path)
     assert {:ok, output_file} = File.read(output_path)
 
-    if live_mixer? do
-      # Live audio mixer produces audio chunks in intervals.
-      # Each tick produces the same amount of audio.
-      # So before eof stream live mixer can produce additional silence.
-      assert <<^reference_file::binary-size(byte_size(reference_file)), _rest::binary>> =
-               output_file
-    else
-      assert reference_file == output_file
-    end
+    # Live audio mixer produces audio chunks in intervals.
+    # Each tick produces the same amount of audio.
+    # So before eof stream live mixer can produce additional silence.
+    assert <<^reference_file::binary-size(byte_size(reference_file)), _rest::binary>> =
+             output_file
   end
 end
