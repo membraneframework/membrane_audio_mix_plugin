@@ -89,7 +89,6 @@ defmodule Membrane.AudioMixer do
         when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be],
         Membrane.RemoteStream
       ),
-    #
     options: [
       offset: [
         spec: Time.non_neg_t(),
@@ -294,9 +293,9 @@ defmodule Membrane.AudioMixer do
   @impl true
   def handle_stream_format(
         _pad,
-        %Membrane.RemoteStream{} = _input_stream_format,
+        %Membrane.RemoteStream{} = _input_stream,
         _context,
-        %{input_stream_format: nil} = _state
+        %{stream_format: nil} = _state
       ) do
     raise """
     You need to specify `stream_format` in options if `Membrane.RemoteStream` will be received on the `:input` pad
@@ -309,7 +308,7 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_stream_format(_pad, %Membrane.RemoteStream{} = _input_stream_format, _context, state) do
+  def handle_stream_format(_pad, %Membrane.RemoteStream{} = _input_stream, _context, state) do
     {[], state}
   end
 
