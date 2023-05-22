@@ -14,6 +14,11 @@ defmodule Membrane.LiveAudioMixerTest do
   @output_file "output.raw"
   @audio_duration 10
   @latency Time.milliseconds(150)
+  @stream_format %RawAudio{
+    channels: 2,
+    sample_rate: 44_100,
+    sample_format: :s24le
+  }
 
   @tag :tmp_dir
   test "creates 10 sec stream even when a lot of packets are lost", %{tmp_dir: tmp_dir} do
@@ -33,6 +38,94 @@ defmodule Membrane.LiveAudioMixerTest do
     links = create_links()
 
     perform_test(elements ++ links, output_path)
+  end
+
+  @tag :tmp_dir
+  test "send `schedule_eos when mixer has one input pad", %{tmp_dir: tmp_dir} do
+    output_path = Path.join(tmp_dir, @output_file)
+    schedule_eos_test(output_path, :one_input_pad)
+  end
+
+  @tag :tmp_dir
+  test "send `schedule_eos when mixer has no input pad", %{tmp_dir: tmp_dir} do
+    output_path = Path.join(tmp_dir, @output_file)
+    schedule_eos_test(output_path, :no_input_pad)
+  end
+
+  defp perform_test(structure, output_path) do
+    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
+
+    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
+
+    check_output_duration(output_path)
+  end
+
+  defp schedule_eos_test(output_path, :one_input_pad) do
+    structure = [
+      child({:file_src, 1}, %Membrane.File.Source{location: @input_path_mp3})
+      |> child({:decoder, 1}, Membrane.MP3.MAD.Decoder)
+      |> child({:parser, 1}, Membrane.AudioMixer.Support.RawAudioParser)
+      |> child({:realtimer, 1}, Membrane.Realtimer)
+      |> via_in(Pad.ref(:input, 1))
+      |> child(:mixer, Membrane.LiveAudioMixer)
+      |> child(:file_sink, %Membrane.File.Sink{location: output_path})
+    ]
+
+    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
+    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+
+    structure = [
+      child({:file_src, 2}, %Membrane.File.Source{location: @input_path_mp3})
+      |> child({:decoder, 2}, Membrane.MP3.MAD.Decoder)
+      |> child({:parser, 2}, Membrane.AudioMixer.Support.RawAudioParser)
+      |> child({:realtimer, 2}, Membrane.Realtimer)
+      |> via_in(Pad.ref(:input, 2))
+      |> get_child(:mixer)
+    ]
+
+    Pipeline.execute_actions(pipeline, spec: structure)
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
+    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
+
+    check_output_duration(output_path)
+  end
+
+  defp schedule_eos_test(output_path, :no_input_pad) do
+    structure = [
+      child(:mixer, Membrane.LiveAudioMixer)
+      |> child(:file_sink, %Membrane.File.Sink{location: output_path})
+    ]
+
+    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+
+    structure = [
+      child({:file_src, 1}, %Membrane.File.Source{location: @input_path_mp3})
+      |> child({:decoder, 1}, Membrane.MP3.MAD.Decoder)
+      |> child({:parser, 1}, Membrane.AudioMixer.Support.RawAudioParser)
+      |> child({:realtimer, 1}, Membrane.Realtimer)
+      |> via_in(Pad.ref(:input, 1))
+      |> get_child(:mixer),
+      child({:file_src, 2}, %Membrane.File.Source{location: @input_path_mp3})
+      |> child({:decoder, 2}, Membrane.MP3.MAD.Decoder)
+      |> child({:parser, 2}, Membrane.AudioMixer.Support.RawAudioParser)
+      |> child({:realtimer, 2}, Membrane.Realtimer)
+      |> via_in(Pad.ref(:input, 2))
+      |> get_child(:mixer)
+    ]
+
+    Pipeline.execute_actions(pipeline, spec: structure)
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
+    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
+
+    check_output_duration(output_path)
   end
 
   defp create_elements(output_path, latency, drop?),
@@ -76,26 +169,12 @@ defmodule Membrane.LiveAudioMixerTest do
       |> get_child(:mixer)
     ]
 
-  defp perform_test(structure, output_path) do
-    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
-
-    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
-    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
-
-    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
-    assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
-
+  defp check_output_duration(output_path) do
     assert {:ok, output_file} = File.read(output_path)
-
-    stream_format = %RawAudio{
-      channels: 2,
-      sample_rate: 44_100,
-      sample_format: :s24le
-    }
 
     output_duration =
       byte_size(output_file)
-      |> Membrane.RawAudio.bytes_to_time(stream_format)
+      |> Membrane.RawAudio.bytes_to_time(@stream_format)
       |> Membrane.Time.as_seconds()
       |> Ratio.floor()
 

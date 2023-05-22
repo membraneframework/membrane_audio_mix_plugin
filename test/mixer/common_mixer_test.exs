@@ -425,12 +425,6 @@ defmodule Membrane.CommonMixerTest do
 
   defp do_perform_test(structure, reference_path, output_path, true) do
     assert pipeline = Pipeline.start_link_supervised!(structure: structure)
-    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
-    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
-
-    # eight is a number of elements when there are three inputs
-    if Enum.count(structure) == 8,
-      do: assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 3))
 
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
 
