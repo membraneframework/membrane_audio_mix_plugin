@@ -92,7 +92,7 @@ defmodule Membrane.LiveAudioMixer do
         |> Map.put(:live_queue, nil)
         |> Map.put(:stream_format, nil)
         |> Map.put(:end_of_stream?, false)
-        |> Map.put(:status, :init)
+        |> Map.put(:started?, false)
         |> Map.put(:eos_scheduled, false)
 
       {[], state}
@@ -101,7 +101,7 @@ defmodule Membrane.LiveAudioMixer do
 
   @impl true
   def handle_pad_added(_pad, _context, %{end_of_stream?: true}),
-    do: raise("Can't add input pad after scheduling end of stream")
+    do: raise("Can't add input pad after end of stream")
 
   @impl true
   def handle_pad_added(_pad, _context, %{end_of_stream?: false} = state), do: {[], state}
@@ -133,17 +133,17 @@ defmodule Membrane.LiveAudioMixer do
   def handle_start_of_stream(
         Pad.ref(:input, pad_id) = pad,
         context,
-        %{live_queue: live_queue, status: status} = state
+        %{live_queue: live_queue, started?: started?} = state
       ) do
     offset = context.pads[pad].options.offset
     new_live_queue = LiveQueue.add_queue(live_queue, pad_id, offset)
 
-    {actions, status} =
-      if status == :init,
-        do: {[start_timer: {:initiator, state.latency}], :started},
-        else: {[], status}
+    actions =
+      if started?,
+        do: [],
+        else: [start_timer: {:initiator, state.latency}]
 
-    {actions, %{state | live_queue: new_live_queue, status: status}}
+    {actions, %{state | live_queue: new_live_queue, started?: true}}
   end
 
   @impl true
@@ -163,14 +163,12 @@ defmodule Membrane.LiveAudioMixer do
         Pad.ref(:input, pad_id),
         context,
         %{eos_scheduled: true, live_queue: live_queue} = state
-      ),
-      do:
-        {[],
-         %{
-           state
-           | live_queue: LiveQueue.remove_queue(live_queue, pad_id),
-             end_of_stream?: all_streams_ended?(context)
-         }}
+      ) do
+    lq = LiveQueue.remove_queue(live_queue, pad_id)
+    eos? = all_streams_ended?(context)
+    state = %{state | live_queue: lq, end_of_stream?: eos?}
+    {[], state}
+  end
 
   def handle_end_of_stream(Pad.ref(:input, pad_id), _context, %{live_queue: live_queue} = state),
     do: {[], %{state | live_queue: LiveQueue.remove_queue(live_queue, pad_id)}}
@@ -198,11 +196,11 @@ defmodule Membrane.LiveAudioMixer do
   def handle_parent_notification(
         :schedule_eos,
         context,
-        %{status: status} = state
+        %{started?: started?} = state
       ) do
     state = %{state | eos_scheduled: true}
 
-    if all_streams_ended?(context) and status == :started,
+    if all_streams_ended?(context) and started?,
       do: {[], %{state | end_of_stream?: true}},
       else: {[], state}
   end

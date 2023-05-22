@@ -43,27 +43,7 @@ defmodule Membrane.LiveAudioMixerTest do
   @tag :tmp_dir
   test "send `schedule_eos when mixer has one input pad", %{tmp_dir: tmp_dir} do
     output_path = Path.join(tmp_dir, @output_file)
-    schedule_eos_test(output_path, :one_input_pad)
-  end
 
-  @tag :tmp_dir
-  test "send `schedule_eos when mixer has no input pad", %{tmp_dir: tmp_dir} do
-    output_path = Path.join(tmp_dir, @output_file)
-    schedule_eos_test(output_path, :no_input_pad)
-  end
-
-  defp perform_test(structure, output_path) do
-    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
-    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
-    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
-
-    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
-    assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
-
-    check_output_duration(output_path)
-  end
-
-  defp schedule_eos_test(output_path, :one_input_pad) do
     structure = [
       child({:file_src, 1}, %Membrane.File.Source{location: @input_path_mp3})
       |> child({:decoder, 1}, Membrane.MP3.MAD.Decoder)
@@ -95,7 +75,10 @@ defmodule Membrane.LiveAudioMixerTest do
     check_output_duration(output_path)
   end
 
-  defp schedule_eos_test(output_path, :no_input_pad) do
+  @tag :tmp_dir
+  test "send `schedule_eos when mixer has no input pad", %{tmp_dir: tmp_dir} do
+    output_path = Path.join(tmp_dir, @output_file)
+
     structure = [
       child(:mixer, Membrane.LiveAudioMixer)
       |> child(:file_sink, %Membrane.File.Sink{location: output_path})
@@ -122,6 +105,42 @@ defmodule Membrane.LiveAudioMixerTest do
     Pipeline.execute_actions(pipeline, spec: structure)
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
+    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
+
+    check_output_duration(output_path)
+  end
+
+  @tag :tmp_dir
+  test "raise when new input pad is added after eos", %{tmp_dir: tmp_dir} do
+    output_path = Path.join(tmp_dir, @output_file)
+    elements = create_elements(output_path, nil, true)
+    links = create_links()
+
+    assert pipeline = Pipeline.start_link_supervised!(structure: elements ++ links)
+    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
+
+    structure = [
+      child({:file_src, 3}, %Membrane.File.Source{location: @input_path_mp3})
+      |> child({:decoder, 3}, Membrane.MP3.MAD.Decoder)
+      |> child({:parser, 3}, Membrane.AudioMixer.Support.RawAudioParser)
+      |> child({:realtimer, 3}, Membrane.Realtimer)
+      |> via_in(Pad.ref(:input, 3))
+      |> get_child(:mixer)
+    ]
+
+    Process.flag(:trap_exit, true)
+    Pipeline.execute_actions(pipeline, spec: structure)
+
+    assert_receive({:EXIT, ^pipeline, {:shutdown, :child_crash}})
+  end
+
+  defp perform_test(structure, output_path) do
+    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
+
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
