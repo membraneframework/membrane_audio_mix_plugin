@@ -101,7 +101,10 @@ defmodule Membrane.LiveAudioMixer do
 
   @impl true
   def handle_pad_added(_pad, _context, %{end_of_stream?: true}),
-    do: raise("Can't add input pad after end of stream")
+    do:
+      raise(
+        "Can't add input pad after scheduling eos and receiving end of stream on all already connected input pads"
+      )
 
   @impl true
   def handle_pad_added(_pad, _context, %{end_of_stream?: false} = state), do: {[], state}
