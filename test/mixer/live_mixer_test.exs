@@ -44,28 +44,17 @@ defmodule Membrane.LiveAudioMixerTest do
   test "send `schedule_eos when mixer has one input pad", %{tmp_dir: tmp_dir} do
     output_path = Path.join(tmp_dir, @output_file)
 
-    structure = [
-      child({:file_src, 1}, %Membrane.File.Source{location: @input_path_mp3})
-      |> child({:decoder, 1}, Membrane.MP3.MAD.Decoder)
-      |> child({:parser, 1}, Membrane.AudioMixer.Support.RawAudioParser)
-      |> child({:realtimer, 1}, Membrane.Realtimer)
-      |> via_in(Pad.ref(:input, 1))
-      |> child(:mixer, Membrane.LiveAudioMixer)
-      |> child(:file_sink, %Membrane.File.Sink{location: output_path})
-    ]
+    structure =
+      [
+        child(:mixer, Membrane.LiveAudioMixer)
+        |> child(:file_sink, %Membrane.File.Sink{location: output_path})
+      ] ++ add_audio_source(1)
 
     assert pipeline = Pipeline.start_link_supervised!(structure: structure)
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
 
-    structure = [
-      child({:file_src, 2}, %Membrane.File.Source{location: @input_path_mp3})
-      |> child({:decoder, 2}, Membrane.MP3.MAD.Decoder)
-      |> child({:parser, 2}, Membrane.AudioMixer.Support.RawAudioParser)
-      |> child({:realtimer, 2}, Membrane.Realtimer)
-      |> via_in(Pad.ref(:input, 2))
-      |> get_child(:mixer)
-    ]
+    structure = add_audio_source(2)
 
     Pipeline.execute_actions(pipeline, spec: structure)
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
@@ -87,20 +76,7 @@ defmodule Membrane.LiveAudioMixerTest do
     assert pipeline = Pipeline.start_link_supervised!(structure: structure)
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
 
-    structure = [
-      child({:file_src, 1}, %Membrane.File.Source{location: @input_path_mp3})
-      |> child({:decoder, 1}, Membrane.MP3.MAD.Decoder)
-      |> child({:parser, 1}, Membrane.AudioMixer.Support.RawAudioParser)
-      |> child({:realtimer, 1}, Membrane.Realtimer)
-      |> via_in(Pad.ref(:input, 1))
-      |> get_child(:mixer),
-      child({:file_src, 2}, %Membrane.File.Source{location: @input_path_mp3})
-      |> child({:decoder, 2}, Membrane.MP3.MAD.Decoder)
-      |> child({:parser, 2}, Membrane.AudioMixer.Support.RawAudioParser)
-      |> child({:realtimer, 2}, Membrane.Realtimer)
-      |> via_in(Pad.ref(:input, 2))
-      |> get_child(:mixer)
-    ]
+    structure = add_audio_source(1) ++ add_audio_source(2)
 
     Pipeline.execute_actions(pipeline, spec: structure)
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
@@ -121,19 +97,23 @@ defmodule Membrane.LiveAudioMixerTest do
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
-    structure = [
-      child({:file_src, 3}, %Membrane.File.Source{location: @input_path_mp3})
-      |> child({:decoder, 3}, Membrane.MP3.MAD.Decoder)
-      |> child({:parser, 3}, Membrane.AudioMixer.Support.RawAudioParser)
-      |> child({:realtimer, 3}, Membrane.Realtimer)
-      |> via_in(Pad.ref(:input, 3))
-      |> get_child(:mixer)
-    ]
+    structure = add_audio_source(3)
 
     Process.flag(:trap_exit, true)
     Pipeline.execute_actions(pipeline, spec: structure)
 
     assert_receive({:EXIT, ^pipeline, {:shutdown, :child_crash}})
+  end
+
+  defp add_audio_source(id) do
+    [
+      child({:file_src, id}, %Membrane.File.Source{location: @input_path_mp3})
+      |> child({:decoder, id}, Membrane.MP3.MAD.Decoder)
+      |> child({:parser, id}, Membrane.AudioMixer.Support.RawAudioParser)
+      |> child({:realtimer, id}, Membrane.Realtimer)
+      |> via_in(Pad.ref(:input, id))
+      |> get_child(:mixer)
+    ]
   end
 
   defp perform_test(structure, output_path) do
