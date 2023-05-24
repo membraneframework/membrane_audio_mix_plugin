@@ -22,7 +22,7 @@ Elements operate only on raw audio (PCM), so some parser may be needed to preced
 
 The elements expect to receive the same audio stream format on each input pad.
 
-audio mixer's input pads can have offset - in the case of a regular mixer it tells how much silence should be added before the first sample.
+Audio Mixers' input pads can have offset - in the case of a regular mixer it tells how much silence should be added before the first sample.
 The live mixer will rewrite timestamps based on the value. Offset has to be positive.
 
 Mixing and interleaving are tested only for integer audio formats.
