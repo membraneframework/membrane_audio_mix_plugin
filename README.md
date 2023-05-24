@@ -48,8 +48,10 @@ Stream format can be additionally enforced by setting an element option (`:strea
 
 
 ### Live Mixer
+
 The Live Mixer adds samples from all pads. It has two strategies to deal with the overflow:
 scaling down waves and clipping. The Live Mixer will produce audio in real time meaning every interval there will be sent a buffer of fixed duration.
+
 In situations where an audio packet is late or doesn't come, the mixer will fill the gaps with silence
 
 ## Usage Example
