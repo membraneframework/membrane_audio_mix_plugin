@@ -13,27 +13,26 @@ It is a part of [Membrane Multimedia Framework](https://membraneframework.org).
 Add the following line to your `deps` in `mix.exs`. Run `mix deps.get`.
 
 ```elixir
-  {:membrane_audio_mix_plugin, "~> 0.12.0"}
+  {:membrane_audio_mix_plugin, "~> 0.13.0"}
 ```
 
 ## Description
 
-Both elements operate only on raw audio (PCM), so some parser may be needed to precede them in a pipeline.
+Elements operate only on raw audio (PCM), so some parser may be needed to precede them in a pipeline.
 
-The elements expect to receive the same audio stream format on each input pad. It can be additionally enforced by setting an element option (`:stream_format`)
+The elements expect to receive the same audio stream format on each input pad.
 
-Input pads can have offset - it tells how much silence should be added before first sample
-from that pad. Offset has to be positive.
+Audio Mixers' input pads can have offset - in the case of a regular mixer it tells how much silence should be added before the first sample.
+The live mixer will rewrite timestamps based on the value. Offset has to be positive.
 
-All inputs have to be added before starting the pipeline and should not be changed
-during mixer's or interleaver's work.
-
-Mixing and interleaving is tested only for integer audio formats.
+Mixing and interleaving are tested only for integer audio formats.
 
 ### Mixer
 
 The Mixer adds samples from all pads. It has two strategies to deal with the overflow:
 scaling down waves and clipping.
+
+Stream format can be additionally enforced by setting an element option (`:stream_format`)
 
 ### Interleaver
 
@@ -42,6 +41,18 @@ This element joins several mono audio streams (with one channel) into one stream
 If audio streams have different durations, all shorter streams are appended with silence to match the longest stream.
 
 Each channel must be named by providing an input pad name and the channel layout using those names must be provided (see [usage example](#audiointerleaver)).
+
+All inputs have to be added before starting the pipeline and should not be changed during interleaver's work.
+
+Stream format can be additionally enforced by setting an element option (`:stream_format`)
+
+
+### Live Mixer
+
+The Live Mixer adds samples from all pads. It has two strategies to deal with the overflow:
+scaling down waves and clipping. The Live Mixer will produce audio in real time meaning every interval there will be sent a buffer of fixed duration.
+
+In situations where an audio packet is late or doesn't come, the mixer will fill the gaps with silence
 
 ## Usage Example
 
