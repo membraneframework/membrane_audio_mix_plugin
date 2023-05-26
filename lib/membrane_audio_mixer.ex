@@ -258,7 +258,7 @@ defmodule Membrane.AudioMixer do
     size = byte_size(get_in(state, [:pads, pad_ref, :queue]))
     time_frame = RawAudio.frame_size(stream_format)
 
-    mix_or_redemand(size, time_frame, context, state)
+    mix_and_redemand(size, time_frame, context, state)
   end
 
   defp do_handle_process(
@@ -278,7 +278,7 @@ defmodule Membrane.AudioMixer do
       )
 
     time_frame = RawAudio.frame_size(stream_format)
-    mix_or_redemand(size, time_frame, context, %{state | pads: pads})
+    mix_and_redemand(size, time_frame, context, %{state | pads: pads})
   end
 
   @impl true
@@ -320,11 +320,10 @@ defmodule Membrane.AudioMixer do
     )
   end
 
-  defp mix_or_redemand(size, time_frame, context, state) do
+  defp mix_and_redemand(size, time_frame, context, state) do
     if size >= time_frame do
       {actions, state} = mix_and_get_actions(context, state)
-      actions = if actions == [], do: [redemand: :output], else: actions
-      {actions, state}
+      {actions ++ [redemand: :output], state}
     else
       {[redemand: :output], state}
     end
