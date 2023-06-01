@@ -77,7 +77,7 @@ defmodule Membrane.AudioMixerTest do
     ]
 
   defp perform_test(structure) do
-    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert pipeline = Pipeline.start_link_supervised!(spec: structure)
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
   end
 end
