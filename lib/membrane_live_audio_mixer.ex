@@ -74,7 +74,7 @@ defmodule Membrane.LiveAudioMixer do
       ),
     options: [
       offset: [
-        spec: Time.non_neg_t(),
+        spec: Time.non_neg(),
         default: 0,
         description: "Offset of the input audio at the pad."
       ]
