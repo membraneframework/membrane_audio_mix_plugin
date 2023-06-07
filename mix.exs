@@ -41,7 +41,7 @@ defmodule Membrane.AudioMix.Mixfile do
 
   defp deps do
     [
-      {:membrane_core, "~> 0.11.2"},
+      {:membrane_core, "~> 0.12.1"},
       {:membrane_common_c, "~> 0.14.0"},
       {:membrane_raw_audio_format, "~> 0.10.0"},
       {:unifex, "~> 1.0"},
