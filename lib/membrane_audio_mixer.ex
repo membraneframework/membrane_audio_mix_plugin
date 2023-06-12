@@ -150,8 +150,9 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_demand(:output, size, :bytes, _context, state) do
-    do_handle_demand(size, state)
+  def handle_demand(:output, size, :bytes, context, state) do
+    frame_size = RawAudio.frame_size(context.pads.output.stream_format)
+    do_handle_demand(size + frame_size, state)
   end
 
   @impl true
