@@ -2,8 +2,8 @@ defmodule Membrane.LiveAudioMixer do
   @moduledoc """
   This element performs audio mixing for live streams.
 
-  Live Audio Mixer starts to mix audio after the first input pad is added,
-  from this point, the mixer will produce a audio until element termination.
+  Live Audio Mixer starts to mix audio after the first input pad is added or (in manual mode) when `start_mixing` notification is send.
+  From this point, the mixer will produce an audio until `:schedule_eos` notification plus `:end_of_stream` on all input pads.
 
   Mixer mixes only raw audio (PCM), so some parser may be needed to precede it in pipeline.
 
@@ -11,6 +11,8 @@ defmodule Membrane.LiveAudioMixer do
 
   - `:schedule_eos` -  mixer will send `end_of_stream` when it processes all input streams.
     After sending `:schedule_eos` mixer will raise if it gets a new input pad.
+
+  - {`:start_mixing`, latency} - mixer will start mixing audio after latency (non_neg_integer()).
 
   Input pads can have offset - it tells how much timestamps differ from mixer time.
   """
@@ -49,14 +51,25 @@ defmodule Membrane.LiveAudioMixer do
                 default: false
               ],
               latency: [
-                spec: non_neg_integer(),
+                spec: non_neg_integer() | nil,
                 description: """
                 The value determines after what time the clock will start interval that mixes audio in real time.
                 Latency is crucial to quality of output audio, the smaller the value, the more packets will be lost.
-                But the biggest the value, the latency of the stream is bigger.
+                But the bigger the value, the bigger the latency of stream.
+
+                If set to nil, Audio Mixer will start mixing when it gets parent_notification `:start_mixing`.
                 """,
                 default: Membrane.Time.milliseconds(200),
                 inspector: &Time.inspect/1
+              ],
+              stream_format: [
+                spec: RawAudio.t() | nil,
+                description: """
+                The value defines a raw audio format of pads connected to the
+                element. It should be the same for all the pads.
+                It is necessary if `latency` is set to nil.
+                """,
+                default: nil
               ]
 
   def_output_pad :output,
@@ -68,10 +81,8 @@ defmodule Membrane.LiveAudioMixer do
     demand_mode: :auto,
     availability: :on_request,
     accepted_format:
-      any_of(
-        %RawAudio{sample_format: sample_format}
-        when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be]
-      ),
+      %RawAudio{sample_format: sample_format}
+      when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be],
     options: [
       offset: [
         spec: Time.non_neg_t(),
@@ -82,21 +93,41 @@ defmodule Membrane.LiveAudioMixer do
 
   @impl true
   def handle_init(_ctx, options) do
-    if options.native_mixer && !options.prevent_clipping do
-      raise("Invalid element options, for native mixer only clipping preventing one is available")
-    else
-      state =
-        options
-        |> Map.from_struct()
-        |> Map.put(:mixer_state, nil)
-        |> Map.put(:live_queue, nil)
-        |> Map.put(:stream_format, nil)
-        |> Map.put(:end_of_stream?, false)
-        |> Map.put(:started?, false)
-        |> Map.put(:eos_scheduled, false)
+    cond do
+      options.native_mixer && !options.prevent_clipping ->
+        raise "Invalid element options, for native mixer only clipping preventing one is available"
 
-      {[], state}
+      options.latency == nil and options.stream_format == nil ->
+        raise "Stream format has to be set to start mixing manually"
+
+      true ->
+        state =
+          options
+          |> Map.from_struct()
+          |> Map.put(:mixer_state, nil)
+          |> Map.put(:live_queue, nil)
+          |> Map.put(:end_of_stream?, false)
+          |> Map.put(:started?, false)
+          |> Map.put(:eos_scheduled, false)
+
+        {mixer_state, live_queue} =
+          if is_nil(options.stream_format),
+            do: {nil, nil},
+            else:
+              {initialize_mixer_state(options.stream_format, state),
+               LiveQueue.init(options.stream_format)}
+
+        {[], %{state | live_queue: live_queue, mixer_state: mixer_state}}
     end
+  end
+
+  @impl true
+  def handle_playing(_context, %{stream_format: %RawAudio{} = stream_format} = state) do
+    {[stream_format: {:output, stream_format}], state}
+  end
+
+  def handle_playing(_context, %{stream_format: nil} = state) do
+    {[], state}
   end
 
   @impl true
@@ -141,12 +172,12 @@ defmodule Membrane.LiveAudioMixer do
     offset = context.pads[pad].options.offset
     new_live_queue = LiveQueue.add_queue(live_queue, pad_id, offset)
 
-    actions =
-      if started?,
-        do: [],
-        else: [start_timer: {:initiator, state.latency}]
+    {actions, started?} =
+      if started? or is_nil(state.latency),
+        do: {[], started?},
+        else: {[start_timer: {:initiator, state.latency}], true}
 
-    {actions, %{state | live_queue: new_live_queue, started?: true}}
+    {actions, %{state | live_queue: new_live_queue, started?: started?}}
   end
 
   @impl true
@@ -207,6 +238,24 @@ defmodule Membrane.LiveAudioMixer do
       do: {[], %{state | end_of_stream?: true}},
       else: {[], state}
   end
+
+  @impl true
+  def handle_parent_notification({:start_mixing, _latency}, _context, %{started?: true} = state),
+    do: {[], state}
+
+  @impl true
+  def handle_parent_notification(
+        {:start_mixing, _latency},
+        _context,
+        %{stream_format: nil} = state
+      ) do
+    Membrane.Logger.warn("Can't start mixing when `stream format` is nil")
+    {[], state}
+  end
+
+  @impl true
+  def handle_parent_notification({:start_mixing, latency}, _context, %{started?: false} = state),
+    do: {[start_timer: {:initiator, latency}], %{state | latency: latency, started?: true}}
 
   defp initialize_mixer_state(nil, _state), do: nil
 

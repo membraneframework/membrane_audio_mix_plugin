@@ -105,6 +105,97 @@ defmodule Membrane.LiveAudioMixerTest do
     assert_receive({:EXIT, ^pipeline, {:shutdown, :child_crash}})
   end
 
+  @tag :tmp_dir
+  test "raise when latency and stream_format is set to nil", %{tmp_dir: tmp_dir} do
+    output_path = Path.join(tmp_dir, @output_file)
+
+    structure = [
+      child(:mixer, %Membrane.LiveAudioMixer{latency: nil})
+      |> child(:file_sink, %Membrane.File.Sink{location: output_path})
+    ]
+
+    {:error, _error} = Pipeline.start(structure: structure)
+  end
+
+  @tag :tmp_dir
+  test "manually start mixing before input pads are added", %{tmp_dir: tmp_dir} do
+    output_path = Path.join(tmp_dir, @output_file)
+
+    structure = [
+      child(:mixer, %Membrane.LiveAudioMixer{latency: nil, stream_format: @stream_format})
+      |> child(:file_sink, %Membrane.File.Sink{location: output_path})
+    ]
+
+    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+
+    Pipeline.message_child(pipeline, :mixer, {:start_mixing, 0})
+
+    # audio duration has to be equal or longer than 15 seconds
+    # input audio has 10 seconds
+    # thats why sleep is a little longer than 5 seconds
+    Process.sleep(5_300)
+
+    structure = add_audio_source(1) ++ add_audio_source(2)
+    Pipeline.execute_actions(pipeline, spec: structure)
+
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
+
+    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
+
+    check_output_duration(output_path, 15)
+  end
+
+  @tag :tmp_dir
+  test "manually start mixing after input pads are added", %{tmp_dir: tmp_dir} do
+    output_path = Path.join(tmp_dir, @output_file)
+
+    structure = [
+      child(:mixer, %Membrane.LiveAudioMixer{latency: nil, stream_format: @stream_format})
+      |> child(:file_sink, %Membrane.File.Sink{location: output_path})
+    ]
+
+    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+
+    structure = add_audio_source(1) ++ add_audio_source(2)
+    Pipeline.execute_actions(pipeline, spec: structure)
+
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
+
+    Pipeline.message_child(pipeline, :mixer, {:start_mixing, 0})
+
+    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
+
+    check_output_duration(output_path)
+  end
+
+  @tag :tmp_dir
+  test "manually start mixing and schedule eos with no input pads", %{tmp_dir: tmp_dir} do
+    output_path = Path.join(tmp_dir, @output_file)
+
+    structure = [
+      child(:mixer, %Membrane.LiveAudioMixer{latency: nil, stream_format: @stream_format})
+      |> child(:file_sink, %Membrane.File.Sink{location: output_path})
+    ]
+
+    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+
+    Pipeline.message_child(pipeline, :mixer, {:start_mixing, 0})
+
+    # audio duration has to be equal or longer than 5 seconds
+    # thats why sleep is a little longer than 5 seconds
+    Process.sleep(5_300)
+
+    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+
+    assert_end_of_stream(pipeline, :file_sink, :input, 1_000)
+
+    check_output_duration(output_path, 5)
+  end
+
   defp add_audio_source(id) do
     [
       child({:file_src, id}, %Membrane.File.Source{location: @input_path_mp3})
@@ -168,7 +259,7 @@ defmodule Membrane.LiveAudioMixerTest do
       |> get_child(:mixer)
     ]
 
-  defp check_output_duration(output_path) do
+  defp check_output_duration(output_path, audio_duration \\ @audio_duration) do
     assert {:ok, output_file} = File.read(output_path)
 
     output_duration =
@@ -177,6 +268,6 @@ defmodule Membrane.LiveAudioMixerTest do
       |> Membrane.Time.as_seconds()
       |> Ratio.floor()
 
-    assert output_duration == @audio_duration
+    assert output_duration == audio_duration
   end
 end
