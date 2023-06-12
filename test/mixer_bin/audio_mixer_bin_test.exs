@@ -74,11 +74,11 @@ defmodule Membrane.AudioMixerBinTest do
           ]
 
       mixer_pipeline = [
-        structure: structure_mixer
+        spec: structure_mixer
       ]
 
       mixer_bin_pipeline = [
-        structure: structure_bin
+        spec: structure_bin
       ]
 
       {

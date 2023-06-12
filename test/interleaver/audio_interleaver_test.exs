@@ -52,7 +52,7 @@ defmodule Membrane.AudioInterleaverTest do
     end
 
     defp perform_test(structure, reference_path, output_path) do
-      assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+      assert pipeline = Pipeline.start_link_supervised!(spec: structure)
 
       assert_end_of_stream(pipeline, :file_sink, :input, 5_000)
 

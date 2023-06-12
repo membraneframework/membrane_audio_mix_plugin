@@ -50,7 +50,7 @@ defmodule Membrane.LiveAudioMixerTest do
         |> child(:file_sink, %Membrane.File.Sink{location: output_path})
       ] ++ add_audio_source(1)
 
-    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert pipeline = Pipeline.start_link_supervised!(spec: structure)
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
 
@@ -73,7 +73,7 @@ defmodule Membrane.LiveAudioMixerTest do
       |> child(:file_sink, %Membrane.File.Sink{location: output_path})
     ]
 
-    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert pipeline = Pipeline.start_link_supervised!(spec: structure)
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
 
     structure = add_audio_source(1) ++ add_audio_source(2)
@@ -93,7 +93,7 @@ defmodule Membrane.LiveAudioMixerTest do
     elements = create_elements(output_path, nil, true)
     links = create_links()
 
-    assert pipeline = Pipeline.start_link_supervised!(structure: elements ++ links)
+    assert pipeline = Pipeline.start_link_supervised!(spec: elements ++ links)
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
@@ -117,7 +117,7 @@ defmodule Membrane.LiveAudioMixerTest do
   end
 
   defp perform_test(structure, output_path) do
-    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert pipeline = Pipeline.start_link_supervised!(spec: structure)
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
 

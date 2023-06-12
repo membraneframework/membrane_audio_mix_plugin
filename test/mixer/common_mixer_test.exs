@@ -415,7 +415,7 @@ defmodule Membrane.CommonMixerTest do
   end
 
   defp do_perform_test(structure, reference_path, output_path, false) do
-    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert pipeline = Pipeline.start_link_supervised!(spec: structure)
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     assert {:ok, reference_file} = File.read(reference_path)
@@ -424,7 +424,7 @@ defmodule Membrane.CommonMixerTest do
   end
 
   defp do_perform_test(structure, reference_path, output_path, true) do
-    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert pipeline = Pipeline.start_link_supervised!(spec: structure)
 
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
 
