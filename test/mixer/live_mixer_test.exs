@@ -196,6 +196,32 @@ defmodule Membrane.LiveAudioMixerTest do
     check_output_duration(output_path, 5)
   end
 
+  @tag :tmp_dir
+  test "manually statr mixing, at the beginning send schedule_eos ", %{tmp_dir: tmp_dir} do
+    output_path = Path.join(tmp_dir, @output_file)
+
+    structure = [
+      child(:mixer, %Membrane.LiveAudioMixer{latency: nil, stream_format: @stream_format})
+      |> child(:file_sink, %Membrane.File.Sink{location: output_path})
+    ]
+
+    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+
+    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+
+    structure = add_audio_source(1) ++ add_audio_source(2)
+    Pipeline.execute_actions(pipeline, spec: structure)
+
+    Pipeline.message_child(pipeline, :mixer, {:start_mixing, 0})
+
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
+    assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
+
+    assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
+
+    check_output_duration(output_path, 10)
+  end
+
   defp add_audio_source(id) do
     [
       child({:file_src, id}, %Membrane.File.Source{location: @input_path_mp3})

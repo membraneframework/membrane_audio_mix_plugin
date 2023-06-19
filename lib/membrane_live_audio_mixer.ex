@@ -2,8 +2,8 @@ defmodule Membrane.LiveAudioMixer do
   @moduledoc """
   This element performs audio mixing for live streams.
 
-  Live Audio Mixer starts to mix audio after the first input pad is added or (in manual mode) when `start_mixing` notification is send.
-  From this point, the mixer will produce an audio until `:schedule_eos` notification plus `:end_of_stream` on all input pads.
+  Live Audio Mixer starts to mix audio after the first input pad is added or, if `latency` option is set to `nil`, when `start_mixing` notification is send.
+  From this point, the mixer will produce an audio until `:schedule_eos` notification and `:end_of_stream` are received on all input pads.
 
   Mixer mixes only raw audio (PCM), so some parser may be needed to precede it in pipeline.
 
@@ -13,6 +13,7 @@ defmodule Membrane.LiveAudioMixer do
     After sending `:schedule_eos` mixer will raise if it gets a new input pad.
 
   - {`:start_mixing`, latency} - mixer will start mixing audio after latency (non_neg_integer()).
+    Audio that will come before the notification will be buffered.
 
   Input pads can have offset - it tells how much timestamps differ from mixer time.
   """
@@ -57,6 +58,10 @@ defmodule Membrane.LiveAudioMixer do
                 Latency is crucial to quality of output audio, the smaller the value, the more packets will be lost.
                 But the bigger the value, the bigger the latency of stream.
 
+                Audio Mixer allows starting mixing earlier with parent_notification `:start_mixing`.
+                In this case, stream_format has to be passed through options.
+
+                If notification `:start_mixing` is sent after mixing has started, the message will be discarded
                 If set to nil, Audio Mixer will start mixing when it gets parent_notification `:start_mixing`.
                 """,
                 default: Membrane.Time.milliseconds(200),
@@ -240,8 +245,10 @@ defmodule Membrane.LiveAudioMixer do
   end
 
   @impl true
-  def handle_parent_notification({:start_mixing, _latency}, _context, %{started?: true} = state),
-    do: {[], state}
+  def handle_parent_notification({:start_mixing, _latency}, _context, %{started?: true} = state) do
+    Membrane.Logger.warn("Live Audio Mixer has already started mixing.")
+    {[], state}
+  end
 
   @impl true
   def handle_parent_notification(
