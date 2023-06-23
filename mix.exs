@@ -75,11 +75,12 @@ defmodule Membrane.AudioMix.Mixfile do
       source_ref: "v#{@version}",
       nest_modules_by_prefix: [
         Membrane.AudioMixer,
+        Membrane.LiveAudioMixer,
         Membrane.AudioInterleaver
       ],
       groups_for_modules: [
         Mixer: [
-          ~r/^Membrane\.AudioMixer.*/
+          ~r/^Membrane\..*AudioMixer.*/
         ],
         Interleaver: [
           ~r/^Membrane\.AudioInterleaver.*/
