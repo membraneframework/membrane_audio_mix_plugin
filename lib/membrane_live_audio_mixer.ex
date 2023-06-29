@@ -62,7 +62,10 @@ defmodule Membrane.LiveAudioMixer do
                 In this case, stream_format has to be passed through options.
 
                 If notification `:start_mixing` is sent after mixing has started, the message will be discarded
-                If set to nil, Audio Mixer will start mixing when it gets parent_notification `:start_mixing`.
+
+                Start mixing manually:
+                  * set latency to nil
+                  * mixing has to be started manually by sending`:start_mixing` notification.
                 """,
                 default: Membrane.Time.milliseconds(200),
                 inspector: &Time.inspect/1

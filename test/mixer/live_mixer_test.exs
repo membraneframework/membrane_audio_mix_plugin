@@ -197,7 +197,7 @@ defmodule Membrane.LiveAudioMixerTest do
   end
 
   @tag :tmp_dir
-  test "manually statr mixing, at the beginning send schedule_eos ", %{tmp_dir: tmp_dir} do
+  test "manually start mixing with schedule_eos sent at the beginning", %{tmp_dir: tmp_dir} do
     output_path = Path.join(tmp_dir, @output_file)
 
     structure = [
