@@ -57,27 +57,29 @@ defmodule Membrane.AudioMixer.ClipPreventingAdder do
     split_fun = if state.is_wave_positive, do: &(&1 >= 0), else: &(&1 <= 0)
     {values, rest} = Enum.split_while(values, split_fun)
 
-    if !is_last_wave && rest == [] do
-      if Enum.all?(values, fn value -> value == 0 end) do
-        {Enum.map(values, &RawAudio.value_to_sample(&1, state.stream_format))
-         |> IO.iodata_to_binary(), state}
-      else
+    silence? = Enum.all?(values, fn value -> value == 0 end)
+
+    cond do
+      rest != [] or is_last_wave ->
+        buffer = [buffer | get_iodata(values, state)] |> IO.iodata_to_binary()
+
+        state =
+          state
+          |> Map.put(:is_wave_positive, !state.is_wave_positive)
+          |> Map.put(:queue, [])
+
+        if is_last_wave && rest == [] do
+          {buffer, state}
+        else
+          add_values(rest, is_last_wave, state, buffer)
+        end
+
+      silence? ->
+        {values_to_raw_sample(values, state.stream_format), state}
+
+      true ->
         state = %__MODULE__{state | queue: state.queue ++ values}
         {buffer, state}
-      end
-    else
-      buffer = [buffer | get_iodata(values, state)] |> IO.iodata_to_binary()
-
-      state =
-        state
-        |> Map.put(:is_wave_positive, !state.is_wave_positive)
-        |> Map.put(:queue, [])
-
-      if is_last_wave && rest == [] do
-        {buffer, state}
-      else
-        add_values(rest, is_last_wave, state, buffer)
-      end
     end
   end
 
@@ -102,4 +104,10 @@ defmodule Membrane.AudioMixer.ClipPreventingAdder do
   end
 
   defp do_scale(values, coefficient), do: Enum.map(values, &trunc(&1 * coefficient))
+
+  defp values_to_raw_sample(values, stream_format) do
+    values
+    |> Enum.map(fn value -> RawAudio.value_to_sample(value, stream_format) end)
+    |> IO.iodata_to_binary()
+  end
 end
