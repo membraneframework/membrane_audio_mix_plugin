@@ -40,7 +40,7 @@ defmodule Membrane.LiveAudioMixer do
                 - If false, overflow will be clipped to the maximal value of the sample in
                 the format. See `Membrane.AudioMixer.Adder`.
                 """,
-                default: true
+                default: false
               ],
               native_mixer: [
                 spec: boolean(),
@@ -101,6 +101,15 @@ defmodule Membrane.LiveAudioMixer do
 
   @impl true
   def handle_init(_ctx, options) do
+    # TODO: native and prevent_clipping adder enqueue silence.
+    # in live mixer we want to immediately return added audio
+    if options.native_mixer or options.prevent_clipping do
+      Membrane.Logger.warn("""
+      Leaving options prevent_clipping and native_mixer as defaults is recommended.
+      In other case silence will be enqueued by mixer and send only when there will be some sound"
+      """)
+    end
+
     cond do
       options.native_mixer && !options.prevent_clipping ->
         raise "Invalid element options, for native mixer only clipping preventing one is available"
@@ -231,7 +240,11 @@ defmodule Membrane.LiveAudioMixer do
         {[], payload, state}
       end
 
-    {[buffer: {:output, %Buffer{payload: payload}}] ++ actions, state}
+    if payload == <<>> do
+      {actions, state}
+    else
+      {[buffer: {:output, %Buffer{payload: payload}}] ++ actions, state}
+    end
   end
 
   @impl true
