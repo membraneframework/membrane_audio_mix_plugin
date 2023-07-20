@@ -10,7 +10,21 @@ It is a part of [Membrane Multimedia Framework](https://membraneframework.org).
 
 ## Installation
 
-Add the following line to your `deps` in `mix.exs`. Run `mix deps.get`.
+First, you need to install [MAD](https://www.underbit.com/products/mad/) on your system.
+
+### macOS
+
+```bash
+brew install mad
+```
+
+### Ubuntu
+
+```bash
+sudo apt-get install libmad0-dev
+```
+
+Then, add the following line to your `deps` in `mix.exs`. Run `mix deps.get`.
 
 ```elixir
 {:membrane_audio_mix_plugin, "~> 0.15.2"}
@@ -46,7 +60,6 @@ All inputs have to be added before starting the pipeline and should not be chang
 
 Stream format can be additionally enforced by setting an element option (`:stream_format`)
 
-
 ### Live Mixer
 
 The Live Mixer adds samples from all pads. It has two strategies to deal with the overflow:
@@ -78,7 +91,7 @@ defmodule Mixing.Pipeline do
           sample_rate: 16_000,
           sample_format: :s16le
         }
-      }) 
+      })
       |> child(:converter, %Membrane.FFmpeg.SWResample.Converter{
         input_stream_format: %Membrane.RawAudio{channels: 1, sample_rate: 16_000, sample_format: :s16le},
         output_stream_format: %Membrane.RawAudio{channels: 2, sample_rate: 48_000, sample_format: :s16le}
