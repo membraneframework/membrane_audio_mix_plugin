@@ -13,7 +13,7 @@ defmodule Membrane.AudioMixer.Support.RawAudioParser do
               ]
 
   def_input_pad :input,
-    demand_mode: :auto,
+    flow_control: :auto,
     accepted_format:
       any_of(
         %RawAudio{sample_format: sample_format}
@@ -23,7 +23,7 @@ defmodule Membrane.AudioMixer.Support.RawAudioParser do
     availability: :always
 
   def_output_pad :output,
-    demand_mode: :auto,
+    flow_control: :auto,
     availability: :always,
     accepted_format: RawAudio
 
@@ -56,7 +56,7 @@ defmodule Membrane.AudioMixer.Support.RawAudioParser do
       do: {[stream_format: {:output, stream_format}], state}
 
   @impl true
-  def handle_process(
+  def handle_buffer(
         _pad,
         %{payload: payload},
         _context,

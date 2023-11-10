@@ -43,13 +43,8 @@ defmodule Membrane.AudioInterleaver do
                 """
               ]
 
-  def_output_pad :output,
-    mode: :pull,
-    availability: :always,
-    accepted_format: RawAudio
-
   def_input_pad :input,
-    mode: :pull,
+    flow_control: :manual,
     availability: :on_request,
     demand_unit: :bytes,
     accepted_format: any_of(%RawAudio{channels: 1}, Membrane.RemoteStream),
@@ -60,6 +55,8 @@ defmodule Membrane.AudioInterleaver do
         description: "Offset of the input audio at the pad."
       ]
     ]
+
+  def_output_pad :output, flow_control: :manual, accepted_format: RawAudio
 
   @impl true
   def handle_init(_ctx, %__MODULE__{} = options) do
@@ -171,7 +168,7 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
-  def handle_process(
+  def handle_buffer(
         pad,
         %Buffer{payload: payload},
         _ctx,

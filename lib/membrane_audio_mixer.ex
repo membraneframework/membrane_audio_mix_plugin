@@ -75,12 +75,11 @@ defmodule Membrane.AudioMixer do
               ]
 
   def_output_pad :output,
-    mode: :pull,
-    availability: :always,
+    flow_control: :manual,
     accepted_format: RawAudio
 
   def_input_pad :input,
-    mode: :pull,
+    flow_control: :manual,
     availability: :on_request,
     demand_unit: :bytes,
     accepted_format:
@@ -222,17 +221,17 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_process(
+  def handle_buffer(
         pad_ref,
         buffer,
         context,
         state
       ) do
     ready_to_mix? = get_in(state.pads, [pad_ref, :ready_to_mix?])
-    do_handle_process(pad_ref, buffer, ready_to_mix?, context, state)
+    do_handle_buffer(pad_ref, buffer, ready_to_mix?, context, state)
   end
 
-  defp do_handle_process(
+  defp do_handle_buffer(
          pad_ref,
          %Buffer{payload: payload, pts: pts},
          false,
@@ -262,7 +261,7 @@ defmodule Membrane.AudioMixer do
     mix_and_redemand(size, time_frame, context, state)
   end
 
-  defp do_handle_process(
+  defp do_handle_buffer(
          pad_ref,
          %Buffer{payload: payload},
          true,

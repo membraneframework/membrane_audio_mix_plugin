@@ -21,7 +21,7 @@ defmodule Membrane.AudioMixer.Support.NetworkSimulator do
               ]
 
   def_input_pad :input,
-    demand_mode: :auto,
+    flow_control: :auto,
     accepted_format:
       any_of(
         %Membrane.RawAudio{sample_format: sample_format}
@@ -30,7 +30,7 @@ defmodule Membrane.AudioMixer.Support.NetworkSimulator do
     availability: :always
 
   def_output_pad :output,
-    demand_mode: :auto,
+    flow_control: :auto,
     availability: :always,
     accepted_format: Membrane.RawAudio
 
@@ -45,7 +45,7 @@ defmodule Membrane.AudioMixer.Support.NetworkSimulator do
   end
 
   @impl true
-  def handle_process(
+  def handle_buffer(
         _pad,
         buffer,
         _context,

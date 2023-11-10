@@ -80,13 +80,9 @@ defmodule Membrane.LiveAudioMixer do
                 default: nil
               ]
 
-  def_output_pad :output,
-    demand_mode: :auto,
-    availability: :always,
-    accepted_format: RawAudio
+  def_output_pad :output, accepted_format: RawAudio
 
   def_input_pad :input,
-    demand_mode: :auto,
     availability: :on_request,
     accepted_format:
       %RawAudio{sample_format: sample_format}
@@ -104,7 +100,7 @@ defmodule Membrane.LiveAudioMixer do
     # TODO: native and prevent_clipping adder enqueue silence.
     # in live mixer we want to immediately return added audio
     if options.native_mixer or options.prevent_clipping do
-      Membrane.Logger.warn("""
+      Membrane.Logger.warning("""
       Leaving options prevent_clipping and native_mixer as defaults is recommended.
       In other case silence will be enqueued by mixer and send only when there will be some sound"
       """)
@@ -198,7 +194,7 @@ defmodule Membrane.LiveAudioMixer do
   end
 
   @impl true
-  def handle_process(
+  def handle_buffer(
         Pad.ref(:input, pad_id),
         buffer,
         _context,
@@ -262,7 +258,7 @@ defmodule Membrane.LiveAudioMixer do
 
   @impl true
   def handle_parent_notification({:start_mixing, _latency}, _context, %{started?: true} = state) do
-    Membrane.Logger.warn("Live Audio Mixer has already started mixing.")
+    Membrane.Logger.warning("Live Audio Mixer has already started mixing.")
     {[], state}
   end
 
@@ -272,7 +268,7 @@ defmodule Membrane.LiveAudioMixer do
         _context,
         %{stream_format: nil} = state
       ) do
-    Membrane.Logger.warn("Can't start mixing when `stream format` is nil")
+    Membrane.Logger.warning("Can't start mixing when `stream format` is nil")
     {[], state}
   end
 

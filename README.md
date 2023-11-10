@@ -27,7 +27,7 @@ sudo apt-get install libmad0-dev
 Then, add the following line to your `deps` in `mix.exs`:
 
 ```elixir
-{:membrane_audio_mix_plugin, "~> 0.15.2"}
+	{:membrane_audio_mix_plugin, "~> 0.16.0"}
 ```
 
 and run `mix deps.get`.

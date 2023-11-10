@@ -44,19 +44,19 @@ defmodule Membrane.LiveAudioMixerTest do
   test "send `schedule_eos when mixer has one input pad", %{tmp_dir: tmp_dir} do
     output_path = Path.join(tmp_dir, @output_file)
 
-    structure =
+    spec =
       [
         child(:mixer, Membrane.LiveAudioMixer)
         |> child(:file_sink, %Membrane.File.Sink{location: output_path})
       ] ++ add_audio_source(1)
 
-    assert pipeline = Pipeline.start_link_supervised!(spec: structure)
+    assert pipeline = Pipeline.start_link_supervised!(spec: spec)
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
 
-    structure = add_audio_source(2)
+    spec = add_audio_source(2)
 
-    Pipeline.execute_actions(pipeline, spec: structure)
+    Pipeline.execute_actions(pipeline, spec: spec)
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
@@ -68,17 +68,17 @@ defmodule Membrane.LiveAudioMixerTest do
   test "send `schedule_eos when mixer has no input pad", %{tmp_dir: tmp_dir} do
     output_path = Path.join(tmp_dir, @output_file)
 
-    structure = [
+    spec = [
       child(:mixer, Membrane.LiveAudioMixer)
       |> child(:file_sink, %Membrane.File.Sink{location: output_path})
     ]
 
-    assert pipeline = Pipeline.start_link_supervised!(spec: structure)
+    assert pipeline = Pipeline.start_link_supervised!(spec: spec)
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
 
-    structure = add_audio_source(1) ++ add_audio_source(2)
+    spec = add_audio_source(1) ++ add_audio_source(2)
 
-    Pipeline.execute_actions(pipeline, spec: structure)
+    Pipeline.execute_actions(pipeline, spec: spec)
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
@@ -87,6 +87,7 @@ defmodule Membrane.LiveAudioMixerTest do
     check_output_duration(output_path)
   end
 
+  @tag :xd
   @tag :tmp_dir
   test "raise when new input pad is added after eos", %{tmp_dir: tmp_dir} do
     output_path = Path.join(tmp_dir, @output_file)
@@ -97,36 +98,36 @@ defmodule Membrane.LiveAudioMixerTest do
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
-    structure = add_audio_source(3)
+    spec = add_audio_source(3)
 
     Process.flag(:trap_exit, true)
-    Pipeline.execute_actions(pipeline, spec: structure)
+    Pipeline.execute_actions(pipeline, spec: spec)
 
-    assert_receive({:EXIT, ^pipeline, {:shutdown, :child_crash}})
+    assert_receive({:EXIT, ^pipeline, {:membrane_child_crash, :mixer, _error_and_stacktrace}})
   end
 
   @tag :tmp_dir
   test "raise when latency and stream_format is set to nil", %{tmp_dir: tmp_dir} do
     output_path = Path.join(tmp_dir, @output_file)
 
-    structure = [
+    spec = [
       child(:mixer, %Membrane.LiveAudioMixer{latency: nil})
       |> child(:file_sink, %Membrane.File.Sink{location: output_path})
     ]
 
-    {:error, _error} = Pipeline.start(structure: structure)
+    {:error, _error} = Pipeline.start(spec: spec)
   end
 
   @tag :tmp_dir
   test "manually start mixing before input pads are added", %{tmp_dir: tmp_dir} do
     output_path = Path.join(tmp_dir, @output_file)
 
-    structure = [
+    spec = [
       child(:mixer, %Membrane.LiveAudioMixer{latency: nil, stream_format: @stream_format})
       |> child(:file_sink, %Membrane.File.Sink{location: output_path})
     ]
 
-    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert pipeline = Pipeline.start_link_supervised!(spec: spec)
 
     Pipeline.message_child(pipeline, :mixer, {:start_mixing, 0})
 
@@ -135,8 +136,8 @@ defmodule Membrane.LiveAudioMixerTest do
     # thats why sleep is a little longer than 5 seconds
     Process.sleep(5_300)
 
-    structure = add_audio_source(1) ++ add_audio_source(2)
-    Pipeline.execute_actions(pipeline, spec: structure)
+    spec = add_audio_source(1) ++ add_audio_source(2)
+    Pipeline.execute_actions(pipeline, spec: spec)
 
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
@@ -151,15 +152,15 @@ defmodule Membrane.LiveAudioMixerTest do
   test "manually start mixing after input pads are added", %{tmp_dir: tmp_dir} do
     output_path = Path.join(tmp_dir, @output_file)
 
-    structure = [
+    spec = [
       child(:mixer, %Membrane.LiveAudioMixer{latency: nil, stream_format: @stream_format})
       |> child(:file_sink, %Membrane.File.Sink{location: output_path})
     ]
 
-    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert pipeline = Pipeline.start_link_supervised!(spec: spec)
 
-    structure = add_audio_source(1) ++ add_audio_source(2)
-    Pipeline.execute_actions(pipeline, spec: structure)
+    spec = add_audio_source(1) ++ add_audio_source(2)
+    Pipeline.execute_actions(pipeline, spec: spec)
 
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
@@ -176,12 +177,15 @@ defmodule Membrane.LiveAudioMixerTest do
   test "manually start mixing and schedule eos with no input pads", %{tmp_dir: tmp_dir} do
     output_path = Path.join(tmp_dir, @output_file)
 
-    structure = [
+    spec = [
       child(:mixer, %Membrane.LiveAudioMixer{latency: nil, stream_format: @stream_format})
       |> child(:file_sink, %Membrane.File.Sink{location: output_path})
     ]
 
-    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert pipeline = Pipeline.start_link_supervised!(spec: spec)
+
+    # time for the pipeline to enter playing playback
+    Process.sleep(100)
 
     Pipeline.message_child(pipeline, :mixer, {:start_mixing, 0})
 
@@ -200,17 +204,17 @@ defmodule Membrane.LiveAudioMixerTest do
   test "manually start mixing with schedule_eos sent at the beginning", %{tmp_dir: tmp_dir} do
     output_path = Path.join(tmp_dir, @output_file)
 
-    structure = [
+    spec = [
       child(:mixer, %Membrane.LiveAudioMixer{latency: nil, stream_format: @stream_format})
       |> child(:file_sink, %Membrane.File.Sink{location: output_path})
     ]
 
-    assert pipeline = Pipeline.start_link_supervised!(structure: structure)
+    assert pipeline = Pipeline.start_link_supervised!(spec: spec)
 
     Pipeline.message_child(pipeline, :mixer, :schedule_eos)
 
-    structure = add_audio_source(1) ++ add_audio_source(2)
-    Pipeline.execute_actions(pipeline, spec: structure)
+    spec = add_audio_source(1) ++ add_audio_source(2)
+    Pipeline.execute_actions(pipeline, spec: spec)
 
     Pipeline.message_child(pipeline, :mixer, {:start_mixing, 0})
 
@@ -233,8 +237,8 @@ defmodule Membrane.LiveAudioMixerTest do
     ]
   end
 
-  defp perform_test(structure, output_path) do
-    assert pipeline = Pipeline.start_link_supervised!(spec: structure)
+  defp perform_test(spec, output_path) do
+    assert pipeline = Pipeline.start_link_supervised!(spec: spec)
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
 
