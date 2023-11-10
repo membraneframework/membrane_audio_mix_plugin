@@ -16,9 +16,9 @@ defmodule Membrane.AudioMixerBin.TreeBuildingTest do
       %{ref: :d, options: %{offset: 4}}
     ]
 
-    assert structure = Bin.gen_mixing_spec(pads, 4, opts)
-    assert child({:mixer, {0, 0}}, opts) in structure
-    links = MapSet.new(structure)
+    assert spec = Bin.gen_mixing_spec(pads, 4, opts)
+    assert child({:mixer, {0, 0}}, opts) in spec
+    links = MapSet.new(spec)
 
     assert MapSet.member?(links, get_child({:mixer, {0, 0}}) |> bin_output())
 
@@ -40,13 +40,13 @@ defmodule Membrane.AudioMixerBin.TreeBuildingTest do
       %{ref: :d, options: %{offset: 4}}
     ]
 
-    assert structure = Bin.gen_mixing_spec(pads, 2, opts)
+    assert spec = Bin.gen_mixing_spec(pads, 2, opts)
 
-    assert child({:mixer, {0, 0}}, opts) in structure
-    assert child({:mixer, {1, 0}}, opts) in structure
-    assert child({:mixer, {1, 1}}, opts) in structure
+    assert child({:mixer, {0, 0}}, opts) in spec
+    assert child({:mixer, {1, 0}}, opts) in spec
+    assert child({:mixer, {1, 1}}, opts) in spec
 
-    links = MapSet.new(structure)
+    links = MapSet.new(spec)
 
     assert MapSet.member?(links, get_child({:mixer, {0, 0}}) |> bin_output())
 

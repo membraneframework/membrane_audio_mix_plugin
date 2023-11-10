@@ -49,9 +49,9 @@ defmodule Membrane.AudioMix.Mixfile do
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
       {:dialyxir, ">= 0.0.0", only: :dev, runtime: false},
       {:credo, ">= 0.0.0", only: :dev, runtime: false},
-      {:membrane_file_plugin, "~> 0.13", only: :test},
-      {:membrane_mp3_mad_plugin, "~> 0.16.0", only: :test},
-      {:membrane_realtimer_plugin, "~> 0.6", only: :test}
+      {:membrane_file_plugin, "~> 0.16.0", only: :test},
+      {:membrane_mp3_mad_plugin, "~> 0.18.0", only: :test},
+      {:membrane_realtimer_plugin, "~> 0.9.0", only: :test}
     ]
   end
 

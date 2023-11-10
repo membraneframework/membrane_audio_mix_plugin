@@ -42,15 +42,15 @@ defmodule Membrane.AudioMixerBinTest do
         sample_format: audio_format
       }
 
-      structure_file_src =
+      spec_file_src =
         input_paths
         |> Enum.with_index(1)
         |> Enum.map(fn {path, index} ->
           child({:file_src, index}, %Membrane.File.Source{location: path}) |> get_child(:mixer)
         end)
 
-      structure_mixer =
-        structure_file_src ++
+      spec_mixer =
+        spec_file_src ++
           [
             child(:mixer, %Membrane.AudioMixer{
               stream_format: stream_format,
@@ -59,8 +59,8 @@ defmodule Membrane.AudioMixerBinTest do
             |> child(:file_sink, %Membrane.File.Sink{location: output_path_mixer})
           ]
 
-      structure_bin =
-        structure_file_src ++
+      spec_bin =
+        spec_file_src ++
           [
             child(:mixer, %Membrane.AudioMixerBin{
               max_inputs_per_node: max_inputs_per_node,
@@ -74,11 +74,11 @@ defmodule Membrane.AudioMixerBinTest do
           ]
 
       mixer_pipeline = [
-        spec: structure_mixer
+        spec: spec_mixer
       ]
 
       mixer_bin_pipeline = [
-        spec: structure_bin
+        spec: spec_bin
       ]
 
       {
@@ -89,8 +89,6 @@ defmodule Membrane.AudioMixerBinTest do
 
     defp play_pipeline(pipeline_options) do
       assert pipeline = Pipeline.start_link_supervised!(pipeline_options)
-
-      assert_pipeline_play(pipeline)
 
       assert_start_of_stream(pipeline, :file_sink, :input)
       assert_end_of_stream(pipeline, :file_sink, :input)

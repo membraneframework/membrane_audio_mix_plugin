@@ -47,9 +47,7 @@ defmodule Membrane.AudioMixerBin do
               ]
 
   def_input_pad :input,
-    mode: :pull,
     availability: :on_request,
-    demand_unit: :bytes,
     accepted_format:
       any_of(
         %RawAudio{sample_format: sample_format}
@@ -64,11 +62,7 @@ defmodule Membrane.AudioMixerBin do
       ]
     ]
 
-  def_output_pad :output,
-    mode: :pull,
-    demand_unit: :bytes,
-    availability: :always,
-    accepted_format: RawAudio
+  def_output_pad :output, accepted_format: RawAudio
 
   @impl true
   def handle_init(_ctx, options) do
@@ -93,7 +87,7 @@ defmodule Membrane.AudioMixerBin do
     state = %{state | current_inputs: current_inputs}
 
     if current_inputs == state.number_of_inputs do
-      spec = create_structure(ctx.pads, state.max_inputs_per_node, state.mixer_options)
+      spec = create_spec(ctx.pads, state.max_inputs_per_node, state.mixer_options)
 
       {[spec: spec], state}
     else
@@ -122,7 +116,7 @@ defmodule Membrane.AudioMixerBin do
     {[], state}
   end
 
-  defp create_structure(pads, max_inputs_per_node, mixer_options) do
+  defp create_spec(pads, max_inputs_per_node, mixer_options) do
     input_pads =
       pads
       |> Map.values()
@@ -189,17 +183,17 @@ defmodule Membrane.AudioMixerBin do
   defp build_mixers_tree(
          level_index,
          inputs_number,
-         structure_acc,
+         spec_acc,
          consts,
          link_generator \\ &mid_tree_link_generator/3
        )
 
-  defp build_mixers_tree(level, 1, structure_acc, _consts, _link_generator)
+  defp build_mixers_tree(level, 1, spec_acc, _consts, _link_generator)
        when level < 0 do
-    [get_child({:mixer, {0, 0}}) |> bin_output()] ++ structure_acc
+    [get_child({:mixer, {0, 0}}) |> bin_output()] ++ spec_acc
   end
 
-  defp build_mixers_tree(level, inputs_number, structure_acc, consts, link_generator) do
+  defp build_mixers_tree(level, inputs_number, spec_acc, consts, link_generator) do
     nodes_num = ceil(inputs_number / consts.max_degree)
 
     children =
@@ -213,7 +207,7 @@ defmodule Membrane.AudioMixerBin do
     build_mixers_tree(
       level - 1,
       nodes_num,
-      structure_acc ++ children ++ links,
+      spec_acc ++ children ++ links,
       consts
     )
   end
