@@ -59,6 +59,8 @@ defmodule Membrane.AudioInterleaverTest do
       assert {:ok, reference_file} = File.read(reference_path)
       assert {:ok, output_file} = File.read(output_path)
       assert reference_file == output_file
+
+      Pipeline.terminate(pipeline)
     end
 
     test "two tracks with the same size" do

@@ -421,6 +421,8 @@ defmodule Membrane.CommonMixerTest do
     assert {:ok, reference_file} = File.read(reference_path)
     assert {:ok, output_file} = File.read(output_path)
     assert reference_file == output_file
+
+    Pipeline.terminate(pipeline)
   end
 
   defp do_perform_test(spec, reference_path, output_path, true) do
@@ -438,5 +440,7 @@ defmodule Membrane.CommonMixerTest do
     # So before eof stream live mixer can produce additional silence.
     assert <<^reference_file::binary-size(byte_size(reference_file)), _rest::binary>> =
              output_file
+
+    Pipeline.terminate(pipeline)
   end
 end
