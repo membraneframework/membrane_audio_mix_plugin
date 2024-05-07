@@ -100,27 +100,27 @@ defmodule Membrane.AudioMixer do
   @impl true
   def handle_init(_ctx, %__MODULE__{stream_format: stream_format} = options) do
     if options.native_mixer && !options.prevent_clipping do
-      raise("Invalid element options, for native mixer only clipping preventing one is available")
-    else
-      queue = TimestampQueue.new(pause_demand_boundary: 1000)
-
-      state =
-        options
-        |> Map.from_struct()
-        |> Map.put(:pads_data, %{})
-        |> Map.put(:mixer_state, initialize_mixer_state(stream_format, options))
-        |> Map.put(:last_ts_sent, 0)
-        |> Map.put(:queue, queue)
-
-      {[], state}
+      raise "Invalid element options, for native mixer only clipping preventing one is available"
     end
+
+    state =
+      options
+      |> Map.from_struct()
+      |> Map.merge(%{
+        pads_data: %{},
+        mixer_state: initialize_mixer_state(stream_format, options),
+        last_ts_sent: 0,
+        queue: TimestampQueue.new(pause_demand_boundary: {:buffers, 1000})
+      })
+
+    {[], state}
   end
 
   @impl true
   def handle_pad_added(pad, ctx, state) do
-    if ctx.pads[pad].options.offset < 0 do
+    if ctx.pad_options.offset < 0 do
       raise """
-      Wrong offset value: #{ctx.pads[pad].options.offset}, audio mixer only allows offset value to be non negative.
+      Wrong offset value: #{ctx.pad_options.offset}, audio mixer only allows offset value to be non negative.
       """
     end
 
@@ -144,8 +144,8 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_demand(:output, size, :bytes, ctx, state) do
-    frame_size = RawAudio.frame_size(ctx.pads.output.stream_format)
+  def handle_demand(:output, size, :bytes, _ctx, state) do
+    frame_size = RawAudio.frame_size(state.stream_format)
     do_handle_demand(size + frame_size, state)
   end
 
@@ -173,6 +173,7 @@ defmodule Membrane.AudioMixer do
     silence =
       if state.synchronize_buffers?, do: <<>>, else: RawAudio.silence(state.stream_format, offset)
 
+    # refactor this shitty flag below
     ready_to_mix? = not state.synchronize_buffers?
 
     state =
@@ -345,16 +346,22 @@ defmodule Membrane.AudioMixer do
   end
 
   defp mix_and_get_actions(ctx, %{stream_format: stream_format, pads_data: pads_data} = state) do
-    frame_size = RawAudio.frame_size(stream_format)
-    mix_size = get_mix_size(pads_data, frame_size)
+    sample_size = RawAudio.frame_size(stream_format)
+
+    min_queue_size =
+      pads_data
+      |> Enum.map(fn {_pad, %{queue: queue}} -> byte_size(queue) end)
+      |> Enum.min(fn -> 0 end)
+
+    mix_size = min_queue_size - rem(min_queue_size, sample_size)
 
     {payload, state} =
-      if mix_size >= frame_size do
+      if mix_size >= sample_size do
         {payload, state} = mix(state, mix_size)
-        state = remove_finished_pads(state, ctx)
+        state = remove_finished_pads_from_pads_data(state, ctx)
 
-        mix_time = RawAudio.bytes_to_time(mix_size, stream_format)
-        state = Map.update!(state, :last_ts_sent, &(&1 + mix_time))
+        payload_duration = RawAudio.bytes_to_time(mix_size, stream_format)
+        state = Map.update!(state, :last_ts_sent, &(&1 + payload_duration))
 
         {payload, state}
       else
@@ -363,7 +370,7 @@ defmodule Membrane.AudioMixer do
 
     {payload, state} =
       if all_streams_ended?(ctx) do
-        {flushed, state} = flush_mixer(state)
+        {flushed, state} = apply_mixer_fun(:flush, [], state)
         {payload <> flushed, state}
       else
         {payload, state}
@@ -371,16 +378,6 @@ defmodule Membrane.AudioMixer do
 
     actions = if payload == <<>>, do: [], else: [buffer: {:output, %Buffer{payload: payload}}]
     {actions, state}
-  end
-
-  defp get_mix_size(pads_data, frame_size) do
-    min_queue_size =
-      pads_data
-      |> Enum.map(fn {_pad, %{queue: queue}} -> byte_size(queue) end)
-      |> Enum.min(fn -> 0 end)
-
-    # min_queue_size trimmed to be a mutliple of frame_size
-    min_queue_size - rem(min_queue_size, frame_size)
   end
 
   defp mix(state, mix_size) do
@@ -393,14 +390,14 @@ defmodule Membrane.AudioMixer do
       |> Enum.unzip()
 
     state = %{state | pads_data: Map.new(pads_list)}
-    mix_payloads(payloads, state)
+    apply_mixer_fun(:mix, [payloads], state)
   end
 
   defp all_streams_ended?(ctx) do
     Enum.all?(ctx.pads, fn {pad, data} -> pad == :output or data.end_of_stream? end)
   end
 
-  defp remove_finished_pads(state, ctx) do
+  defp remove_finished_pads_from_pads_data(state, ctx) do
     frame_size = RawAudio.frame_size(state.stream_format)
 
     pads_data =
@@ -411,13 +408,9 @@ defmodule Membrane.AudioMixer do
     %{state | pads_data: pads_data}
   end
 
-  defp mix_payloads(payloads, %{mixer_state: %module{} = mixer_state} = state) do
-    {payload, mixer_state} = module.mix(payloads, mixer_state)
-    {payload, %{state | mixer_state: mixer_state}}
-  end
-
-  defp flush_mixer(%{mixer_state: %module{} = mixer_state} = state) do
-    {payload, mixer_state} = module.flush(mixer_state)
-    {payload, %{state | mixer_state: mixer_state}}
+  defp apply_mixer_fun(fun_name, args, state) do
+    Map.get_and_update!(state, :mixer_state, fn %mixer_module{} = mixer_state ->
+      apply(mixer_module, fun_name, args ++ [mixer_state])
+    end)
   end
 end
