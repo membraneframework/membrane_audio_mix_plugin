@@ -197,14 +197,14 @@ defmodule Membrane.AudioMixer do
           state
       end
 
-    {actions, state} = mix_and_get_actions(ctx, state)
+    {actions, state} = mix(ctx, state)
 
-    actions =
-      if all_streams_ended?(ctx) do
-        actions ++ [{:end_of_stream, :output}]
-      else
-        actions
-      end
+    # actions =
+    #   if all_streams_ended?(ctx) do
+    #     actions ++ [{:end_of_stream, :output}]
+    #   else
+    #     actions
+    #   end
 
     {actions, state}
   end
@@ -252,9 +252,16 @@ defmodule Membrane.AudioMixer do
       end
 
     size = byte_size(get_in(state, [:pads_data, pad_ref, :queue]))
-    frame_size = RawAudio.frame_size(stream_format)
+    # frame_size = RawAudio.frame_size(stream_format)
 
-    mix_and_redemand(size, frame_size, ctx, state)
+    # mix_and_redemand(size, frame_size, ctx, state)
+
+    {mix_actions, state} =
+      if size >= RawAudio.frame_size(stream_format),
+        do: mix(ctx, state),
+        else: {[], state}
+
+    {mix_actions ++ [redemand: :output], state}
   end
 
   defp do_handle_buffer(
@@ -262,19 +269,19 @@ defmodule Membrane.AudioMixer do
          %Buffer{payload: payload},
          true,
          ctx,
-         %{stream_format: stream_format, pads_data: pads_data} = state
+         %{stream_format: stream_format} = state
        ) do
-    {size, pads_data} =
-      Map.get_and_update(
-        pads_data,
-        pad_ref,
-        fn %{queue: queue} = pad ->
-          {byte_size(queue) + byte_size(payload), %{pad | queue: queue <> payload}}
-        end
-      )
+    {size, state} =
+      get_and_update_in(state, [:pads_data, pad_ref], fn %{queue: queue} = pad_data ->
+        {byte_size(queue) + byte_size(payload), %{pad_data | queue: queue <> payload}}
+      end)
 
-    frame_size = RawAudio.frame_size(stream_format)
-    mix_and_redemand(size, frame_size, ctx, %{state | pads_data: pads_data})
+    {mix_actions, state} =
+      if size >= RawAudio.frame_size(stream_format),
+        do: mix(ctx, state),
+        else: {[], state}
+
+    {mix_actions ++ [redemand: :output], state}
   end
 
   @impl true
@@ -316,12 +323,12 @@ defmodule Membrane.AudioMixer do
     )
   end
 
-  defp mix_and_redemand(size, frame_size, ctx, state) do
-    {actions, state} =
-      if size >= frame_size, do: mix_and_get_actions(ctx, state), else: {[], state}
+  # defp mix_and_redemand(size, frame_size, ctx, state) do
+  #   {actions, state} =
+  #     if size >= frame_size, do: mix(ctx, state), else: {[], state}
 
-    {actions ++ [redemand: :output], state}
-  end
+  #   {actions ++ [redemand: :output], state}
+  # end
 
   defp initialize_mixer_state(nil, _state), do: nil
 
@@ -345,7 +352,7 @@ defmodule Membrane.AudioMixer do
     {actions, state}
   end
 
-  defp mix_and_get_actions(ctx, %{stream_format: stream_format, pads_data: pads_data} = state) do
+  defp mix(ctx, %{stream_format: stream_format, pads_data: pads_data} = state) do
     sample_size = RawAudio.frame_size(stream_format)
 
     min_queue_size =
@@ -355,32 +362,42 @@ defmodule Membrane.AudioMixer do
 
     mix_size = min_queue_size - rem(min_queue_size, sample_size)
 
-    {payload, state} =
+    {mixed_data, state} =
       if mix_size >= sample_size do
-        {payload, state} = mix(state, mix_size)
-        state = remove_finished_pads_from_pads_data(state, ctx)
+        {mixed_data, state} = mix_queued_data(mix_size, ctx, state)
 
-        payload_duration = RawAudio.bytes_to_time(mix_size, stream_format)
-        state = Map.update!(state, :last_ts_sent, &(&1 + payload_duration))
+        mixed_duration = RawAudio.bytes_to_time(mix_size, stream_format)
+        state = Map.update!(state, :last_ts_sent, &(&1 + mixed_duration))
 
-        {payload, state}
+        {mixed_data, state}
       else
         {<<>>, state}
       end
 
+    send_end_of_stream? = all_streams_ended?(ctx)
+
     {payload, state} =
-      if all_streams_ended?(ctx) do
-        {flushed, state} = apply_mixer_fun(:flush, [], state)
-        {payload <> flushed, state}
+      if send_end_of_stream? do
+        {flushed_data, state} = apply_mixer_fun(:flush, [], state)
+        {mixed_data <> flushed_data, state}
       else
-        {payload, state}
+        {mixed_data, state}
       end
 
-    actions = if payload == <<>>, do: [], else: [buffer: {:output, %Buffer{payload: payload}}]
+    buffer_action =
+      if payload != <<>>,
+        do: [buffer: {:output, %Buffer{payload: payload}}],
+        else: []
+
+    actions =
+      if send_end_of_stream?,
+        do: buffer_action ++ [end_of_stream: :output],
+        else: buffer_action
+
     {actions, state}
   end
 
-  defp mix(state, mix_size) do
+  defp mix_queued_data(mix_size, ctx, state) do
     {payloads, pads_list} =
       state.pads_data
       |> Enum.map(fn
@@ -389,23 +406,22 @@ defmodule Membrane.AudioMixer do
       end)
       |> Enum.unzip()
 
-    state = %{state | pads_data: Map.new(pads_list)}
+    sample_size = RawAudio.frame_size(state.stream_format)
+
+    pads_data =
+      pads_list
+      |> Enum.reject(fn {pad, %{queue: queue}} ->
+        ctx.pads[pad].end_of_stream? and byte_size(queue) < sample_size
+      end)
+      |> Map.new()
+
+    state = %{state | pads_data: pads_data}
+
     apply_mixer_fun(:mix, [payloads], state)
   end
 
   defp all_streams_ended?(ctx) do
     Enum.all?(ctx.pads, fn {pad, data} -> pad == :output or data.end_of_stream? end)
-  end
-
-  defp remove_finished_pads_from_pads_data(state, ctx) do
-    frame_size = RawAudio.frame_size(state.stream_format)
-
-    pads_data =
-      Map.reject(state.pads_data, fn {pad, %{queue: queue}} ->
-        ctx.pads[pad].end_of_stream? and byte_size(queue) < frame_size
-      end)
-
-    %{state | pads_data: pads_data}
   end
 
   defp apply_mixer_fun(fun_name, args, state) do
