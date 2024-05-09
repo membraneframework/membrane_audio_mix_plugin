@@ -91,7 +91,6 @@ defmodule Membrane.LiveAudioMixerTest do
     Pipeline.terminate(pipeline)
   end
 
-  @tag :xd
   @tag :tmp_dir
   test "raise when new input pad is added after eos", %{tmp_dir: tmp_dir} do
     output_path = Path.join(tmp_dir, @output_file)
