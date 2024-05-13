@@ -44,7 +44,6 @@ defmodule Membrane.AudioMix.Mixfile do
       {:membrane_core, "~> 1.0"},
       {:membrane_common_c, "~> 0.16.0"},
       {:membrane_raw_audio_format, "~> 0.12.0"},
-      {:membrane_timestamp_queue, "~> 0.2.2"},
       {:unifex, "~> 1.0"},
       {:bunch, "~> 1.3"},
       {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},

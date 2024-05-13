@@ -22,7 +22,6 @@ defmodule Membrane.AudioMixer do
   alias Membrane.RawAudio
   alias Membrane.RemoteStream
   alias Membrane.Time
-  alias Membrane.TimestampQueue
 
   def_options stream_format: [
                 type: :struct,
@@ -116,7 +115,6 @@ defmodule Membrane.AudioMixer do
         pads_data: %{},
         mixer_state: initialize_mixer_state(stream_format, options),
         last_ts_sent: 0,
-        queue: TimestampQueue.new(pause_demand_boundary: {:buffers, 1000}),
         sample_size: sample_size
       })
 
