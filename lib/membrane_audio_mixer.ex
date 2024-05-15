@@ -98,25 +98,15 @@ defmodule Membrane.AudioMixer do
     ]
 
   @impl true
-  def handle_init(_ctx, %__MODULE__{stream_format: stream_format} = options) do
-    if options.native_mixer && !options.prevent_clipping do
+  def handle_init(_ctx, %__MODULE__{} = options) do
+    if options.native_mixer and not options.prevent_clipping do
       raise "Invalid element options, for native mixer only clipping preventing one is available"
     end
-
-    sample_size =
-      if options.stream_format != nil,
-        do: RawAudio.frame_size(options.stream_format),
-        else: nil
 
     state =
       options
       |> Map.from_struct()
-      |> Map.merge(%{
-        pads_data: %{},
-        mixer_state: initialize_mixer_state(stream_format, options),
-        last_ts_sent: 0,
-        sample_size: sample_size
-      })
+      |> Map.merge(%{pads_data: %{}, last_ts_sent: 0, sample_size: nil, mixer_state: nil})
 
     {[], state}
   end
@@ -142,23 +132,14 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_playing(_ctx, %{stream_format: nil} = state) do
+  def handle_demand(:output, _size, _demand, ctx, state)
+      when ctx.pads.output.stream_format == nil do
     {[], state}
-  end
-
-  @impl true
-  def handle_playing(_ctx, state) do
-    {[stream_format: {:output, state.stream_format}], state}
   end
 
   @impl true
   def handle_demand(:output, size, :bytes, _ctx, state) do
     do_handle_demand(size + state.sample_size, state)
-  end
-
-  @impl true
-  def handle_demand(:output, _buffers_count, :buffers, _ctx, %{stream_format: nil} = state) do
-    {[], state}
   end
 
   @impl true
@@ -185,13 +166,27 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_stream_format(_pad, stream_format, _ctx, %{stream_format: nil} = state) do
-    with %RemoteStream{} <- stream_format do
-      raise """
-      You need to specify `stream_format` in options if `Membrane.RemoteStream` will be received on the `:input` pad
-      """
-    end
+  def handle_stream_format(pad, stream_format, ctx, state) do
+    {actions, state} =
+      cond do
+        ctx.pads.output.stream_format != nil -> {[], state}
+        state.stream_format != nil -> set_stream_format(state.stream_format, state)
+        true -> set_stream_format(stream_format, state)
+      end
 
+    :ok = validate_input_stream_format!(pad, stream_format, state)
+
+    {actions, state}
+  end
+
+  defp set_stream_format(%RemoteStream{}, _state) do
+    raise """
+    You need to specify `stream_format` in options if `Membrane.RemoteStream` will be received on the `:input` \
+    pad and you cannot pas `Membrane.RemoteStream{}` in this option.
+    """
+  end
+
+  defp set_stream_format(stream_format, state) when stream_format != nil do
     state =
       %{
         state
@@ -203,21 +198,20 @@ defmodule Membrane.AudioMixer do
     {[stream_format: {:output, stream_format}, redemand: :output], state}
   end
 
-  @impl true
-  def handle_stream_format(pad, stream_format, _ctx, state) do
-    if stream_format != state.stream_format and not match?(%RemoteStream{}, stream_format) do
-      raise """
-      Received invalid stream_format on pad #{inspect(pad)}, expected: #{inspect(state.stream_format)}, \
-      got: #{inspect(stream_format)}
-      """
-    end
+  defp validate_input_stream_format!(_pad, %RemoteStream{}, _state), do: :ok
 
-    {[], state}
+  defp validate_input_stream_format!(_pad, stream_format, %{stream_format: stream_format}),
+    do: :ok
+
+  defp validate_input_stream_format!(pad, stream_format, state) do
+    raise """
+    Received invalid stream_format on pad #{inspect(pad)}, expected: #{inspect(state.stream_format)}, \
+    got: #{inspect(stream_format)}
+    """
   end
 
   defp initialize_mixer_state(stream_format, state) do
     cond do
-      stream_format == nil -> nil
       not state.prevent_clipping -> Adder.init(stream_format)
       state.native_mixer -> NativeAdder.init(stream_format)
       true -> ClipPreventingAdder.init(stream_format)
