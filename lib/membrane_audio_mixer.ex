@@ -24,7 +24,6 @@ defmodule Membrane.AudioMixer do
   alias Membrane.Time
 
   def_options stream_format: [
-                type: :struct,
                 spec: RawAudio.t(),
                 description: """
                 The value defines a raw audio format of pads connected to the
@@ -33,7 +32,6 @@ defmodule Membrane.AudioMixer do
                 default: nil
               ],
               frames_per_buffer: [
-                type: :integer,
                 spec: pos_integer(),
                 description: """
                 Assumed number of raw audio frames in each buffer.
@@ -42,7 +40,6 @@ defmodule Membrane.AudioMixer do
                 default: 2048
               ],
               prevent_clipping: [
-                type: :boolean,
                 spec: boolean(),
                 description: """
                 Defines how the mixer should act in the case when an overflow happens.
@@ -54,7 +51,6 @@ defmodule Membrane.AudioMixer do
                 default: true
               ],
               native_mixer: [
-                type: :boolean,
                 spec: boolean(),
                 description: """
                 The value determines if mixer should use NIFs for mixing audio. Only
@@ -64,7 +60,6 @@ defmodule Membrane.AudioMixer do
                 default: false
               ],
               synchronize_buffers?: [
-                type: :boolean,
                 spec: boolean(),
                 description: """
                 The value determines if mixer should synchronize buffers based on pts values.
@@ -132,14 +127,14 @@ defmodule Membrane.AudioMixer do
   end
 
   @impl true
-  def handle_demand(:output, _size, _demand, ctx, state)
-      when ctx.pads.output.stream_format == nil do
+  def handle_demand(:output, _size, _demand, _ctx, %{stream_format: nil} = state) do
     {[], state}
   end
 
   @impl true
   def handle_demand(:output, size, :bytes, _ctx, state) do
-    do_handle_demand(size + state.sample_size, state)
+    sample_size = state.sample_size || RawAudio.frame_size(state.stream_format)
+    do_handle_demand(size + sample_size, state)
   end
 
   @impl true
