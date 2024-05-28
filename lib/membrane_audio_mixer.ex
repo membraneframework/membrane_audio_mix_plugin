@@ -255,6 +255,7 @@ defmodule Membrane.AudioMixer do
 
   defp mix(ctx, %{stream_format: stream_format} = state) do
     mix_size = calculate_mix_size(state)
+    buffer_pts = state.last_ts_sent
 
     {mixed_data, state} =
       if mix_size >= state.sample_size do
@@ -283,7 +284,7 @@ defmodule Membrane.AudioMixer do
 
     buffer_action =
       if output_payload != <<>>,
-        do: [buffer: {:output, %Buffer{payload: output_payload}}],
+        do: [buffer: {:output, %Buffer{payload: output_payload, pts: buffer_pts}}],
         else: []
 
     actions =
