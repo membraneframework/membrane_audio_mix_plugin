@@ -177,7 +177,7 @@ defmodule Membrane.AudioMixer do
   defp set_stream_format(%RemoteStream{}, _state) do
     raise """
     You need to specify `stream_format` in options if `Membrane.RemoteStream` will be received on the `:input` \
-    pad and you cannot pas `Membrane.RemoteStream{}` in this option.
+    pad and you cannot pass `Membrane.RemoteStream{}` in this option.
     """
   end
 
@@ -255,7 +255,7 @@ defmodule Membrane.AudioMixer do
 
   defp mix(ctx, %{stream_format: stream_format} = state) do
     mix_size = calculate_mix_size(state)
-    buffer_pts = state.last_ts_sent
+    buffer_ts = state.last_ts_sent
 
     {mixed_data, state} =
       if mix_size >= state.sample_size do
@@ -283,9 +283,12 @@ defmodule Membrane.AudioMixer do
       end
 
     buffer_action =
-      if output_payload != <<>>,
-        do: [buffer: {:output, %Buffer{payload: output_payload, pts: buffer_pts}}],
-        else: []
+      if output_payload != <<>> do
+        buffer = %Buffer{payload: output_payload, pts: buffer_ts, dts: buffer_ts}
+        [buffer: {:output, buffer}]
+      else
+        []
+      end
 
     actions =
       if send_end_of_stream?,
