@@ -62,6 +62,8 @@ defmodule Membrane.LiveAudioMixerTest do
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     check_output_duration(output_path)
+
+    Pipeline.terminate(pipeline)
   end
 
   @tag :tmp_dir
@@ -85,9 +87,10 @@ defmodule Membrane.LiveAudioMixerTest do
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     check_output_duration(output_path)
+
+    Pipeline.terminate(pipeline)
   end
 
-  @tag :xd
   @tag :tmp_dir
   test "raise when new input pad is added after eos", %{tmp_dir: tmp_dir} do
     output_path = Path.join(tmp_dir, @output_file)
@@ -146,6 +149,8 @@ defmodule Membrane.LiveAudioMixerTest do
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     check_output_duration(output_path, 15)
+
+    Pipeline.terminate(pipeline)
   end
 
   @tag :tmp_dir
@@ -171,6 +176,8 @@ defmodule Membrane.LiveAudioMixerTest do
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     check_output_duration(output_path)
+
+    Pipeline.terminate(pipeline)
   end
 
   @tag :tmp_dir
@@ -198,6 +205,8 @@ defmodule Membrane.LiveAudioMixerTest do
     assert_end_of_stream(pipeline, :file_sink, :input, 1_000)
 
     check_output_duration(output_path, 5)
+
+    Pipeline.terminate(pipeline)
   end
 
   @tag :tmp_dir
@@ -224,6 +233,8 @@ defmodule Membrane.LiveAudioMixerTest do
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     check_output_duration(output_path, 10)
+
+    Pipeline.terminate(pipeline)
   end
 
   defp add_audio_source(id) do
@@ -246,6 +257,8 @@ defmodule Membrane.LiveAudioMixerTest do
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     check_output_duration(output_path)
+
+    Pipeline.terminate(pipeline)
   end
 
   defp create_elements(output_path, latency, drop?),

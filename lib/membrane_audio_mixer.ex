@@ -20,10 +20,10 @@ defmodule Membrane.AudioMixer do
   alias Membrane.AudioMixer.{Adder, ClipPreventingAdder, NativeAdder}
   alias Membrane.Buffer
   alias Membrane.RawAudio
+  alias Membrane.RemoteStream
   alias Membrane.Time
 
   def_options stream_format: [
-                type: :struct,
                 spec: RawAudio.t(),
                 description: """
                 The value defines a raw audio format of pads connected to the
@@ -32,7 +32,6 @@ defmodule Membrane.AudioMixer do
                 default: nil
               ],
               frames_per_buffer: [
-                type: :integer,
                 spec: pos_integer(),
                 description: """
                 Assumed number of raw audio frames in each buffer.
@@ -41,7 +40,6 @@ defmodule Membrane.AudioMixer do
                 default: 2048
               ],
               prevent_clipping: [
-                type: :boolean,
                 spec: boolean(),
                 description: """
                 Defines how the mixer should act in the case when an overflow happens.
@@ -53,7 +51,6 @@ defmodule Membrane.AudioMixer do
                 default: true
               ],
               native_mixer: [
-                type: :boolean,
                 spec: boolean(),
                 description: """
                 The value determines if mixer should use NIFs for mixing audio. Only
@@ -63,7 +60,6 @@ defmodule Membrane.AudioMixer do
                 default: false
               ],
               synchronize_buffers?: [
-                type: :boolean,
                 spec: boolean(),
                 description: """
                 The value determines if mixer should synchronize buffers based on pts values.
@@ -86,7 +82,7 @@ defmodule Membrane.AudioMixer do
       any_of(
         %RawAudio{sample_format: sample_format}
         when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be],
-        Membrane.RemoteStream
+        RemoteStream
       ),
     options: [
       offset: [
@@ -97,345 +93,242 @@ defmodule Membrane.AudioMixer do
     ]
 
   @impl true
-  def handle_init(_ctx, %__MODULE__{stream_format: stream_format} = options) do
-    if options.native_mixer && !options.prevent_clipping do
-      raise("Invalid element options, for native mixer only clipping preventing one is available")
-    else
-      state =
-        options
-        |> Map.from_struct()
-        |> Map.put(:pads, %{})
-        |> Map.put(:mixer_state, initialize_mixer_state(stream_format, options))
-        |> Map.put(:last_ts_sent, 0)
-
-      {[], state}
+  def handle_init(_ctx, %__MODULE__{} = options) do
+    if options.native_mixer and not options.prevent_clipping do
+      raise "Invalid element options, for native mixer only clipping preventing one is available"
     end
-  end
-
-  @impl true
-  def handle_pad_added(pad, context, state) do
-    offset = context.pads[pad].options.offset
-
-    if offset < 0,
-      do:
-        raise(
-          "Wrong offset value: #{offset}, audio mixer only allows offset value to be non negative."
-        )
 
     state =
-      put_in(
-        state,
-        [:pads, pad],
-        %{queue: <<>>, ready_to_mix?: false}
-      )
+      options
+      |> Map.from_struct()
+      |> Map.merge(%{pads_data: %{}, last_ts_sent: 0, sample_size: nil, mixer_state: nil})
 
     {[], state}
   end
 
   @impl true
-  def handle_pad_removed(pad, _context, state) do
-    state = Bunch.Access.delete_in(state, [:pads, pad])
+  def handle_pad_added(pad, ctx, state) do
+    offset = ctx.pad_options.offset
+
+    if offset < 0 do
+      raise "Wrong offset value: #{offset}, audio mixer only allows offset value to be non negative."
+    end
+
+    pad_data = %{queue: <<>>, synchronized?: false, offset: offset}
+    state = put_in(state, [:pads_data, pad], pad_data)
 
     {[], state}
   end
 
   @impl true
-  def handle_playing(_context, %{stream_format: %RawAudio{} = stream_format} = state) do
-    {[stream_format: {:output, stream_format}], state}
-  end
-
-  def handle_playing(_context, %{stream_format: nil} = state) do
+  def handle_pad_removed(pad, _ctx, state) do
+    state = Bunch.Access.delete_in(state, [:pads_data, pad])
     {[], state}
   end
 
   @impl true
-  def handle_demand(:output, size, :bytes, context, state) do
-    frame_size = RawAudio.frame_size(context.pads.output.stream_format)
-    do_handle_demand(size + frame_size, state)
-  end
-
-  @impl true
-  def handle_demand(:output, _buffers_count, :buffers, _context, %{stream_format: nil} = state) do
+  def handle_demand(:output, _size, _demand, _ctx, %{stream_format: nil} = state) do
     {[], state}
   end
 
   @impl true
-  def handle_demand(
-        :output,
-        buffers_count,
-        :buffers,
-        _context,
-        %{frames_per_buffer: frames, stream_format: stream_format} = state
-      ) do
-    size = buffers_count * RawAudio.frames_to_bytes(frames, stream_format)
-    do_handle_demand(size, state)
+  def handle_demand(:output, size, :bytes, _ctx, state) do
+    sample_size = state.sample_size || RawAudio.frame_size(state.stream_format)
+    do_handle_demand(size + sample_size, state)
   end
 
   @impl true
-  def handle_start_of_stream(pad, context, state) do
-    offset = context.pads[pad].options.offset
-
-    silence =
-      if state.synchronize_buffers?, do: <<>>, else: RawAudio.silence(state.stream_format, offset)
-
-    ready_to_mix? = not state.synchronize_buffers?
-
-    state =
-      put_in(
-        state,
-        [:pads, pad],
-        %{queue: silence, offset: offset, ready_to_mix?: ready_to_mix?}
-      )
-
-    {[redemand: :output], state}
+  def handle_demand(:output, buffers_count, :buffers, _ctx, state) do
+    output_payload_size = RawAudio.frames_to_bytes(state.frames_per_buffer, state.stream_format)
+    do_handle_demand(buffers_count * output_payload_size, state)
   end
 
-  @impl true
-  def handle_end_of_stream(pad, context, state) do
-    state =
-      case get_in(state, [:pads, pad]) do
-        %{queue: <<>>} ->
-          Bunch.Access.delete_in(state, [:pads, pad])
-
-        _state ->
-          state
-      end
-
-    {actions, state} = mix_and_get_actions(context, state)
-
+  defp do_handle_demand(target_queues_size, state) do
     actions =
-      if all_streams_ended?(context) do
-        actions ++ [{:end_of_stream, :output}]
-      else
-        actions
-      end
+      state.pads_data
+      |> Enum.map(fn {pad, %{queue: queue}} ->
+        demand = max(0, target_queues_size - byte_size(queue))
+        {:demand, {pad, demand}}
+      end)
 
     {actions, state}
   end
 
   @impl true
-  def handle_event(pad, event, _context, state) do
+  def handle_event(pad, event, _ctx, state) do
     Membrane.Logger.debug("Received event #{inspect(event)} on pad #{inspect(pad)}")
-
     {[], state}
   end
 
   @impl true
-  def handle_buffer(
-        pad_ref,
-        buffer,
-        context,
-        state
-      ) do
-    ready_to_mix? = get_in(state.pads, [pad_ref, :ready_to_mix?])
-    do_handle_buffer(pad_ref, buffer, ready_to_mix?, context, state)
-  end
-
-  defp do_handle_buffer(
-         pad_ref,
-         %Buffer{payload: payload, pts: pts},
-         false,
-         context,
-         %{stream_format: stream_format, pads: pads, last_ts_sent: last_ts_sent} = state
-       ) do
-    offset = get_in(pads, [pad_ref, :offset])
-    buffer_ts = pts + offset
-
-    state =
-      if buffer_ts >= last_ts_sent do
-        diff = buffer_ts - last_ts_sent
-        silence = RawAudio.silence(stream_format, diff)
-
-        update_in(
-          state,
-          [:pads, pad_ref],
-          &%{&1 | queue: silence <> payload, ready_to_mix?: true}
-        )
-      else
-        state
+  def handle_stream_format(pad, stream_format, ctx, state) do
+    {actions, state} =
+      cond do
+        ctx.pads.output.stream_format != nil -> {[], state}
+        state.stream_format != nil -> set_stream_format(state.stream_format, state)
+        true -> set_stream_format(stream_format, state)
       end
 
-    size = byte_size(get_in(state, [:pads, pad_ref, :queue]))
-    time_frame = RawAudio.frame_size(stream_format)
+    :ok = validate_input_stream_format!(pad, stream_format, state)
 
-    mix_and_redemand(size, time_frame, context, state)
+    {actions, state}
   end
 
-  defp do_handle_buffer(
-         pad_ref,
-         %Buffer{payload: payload},
-         true,
-         context,
-         %{stream_format: stream_format, pads: pads} = state
-       ) do
-    {size, pads} =
-      Map.get_and_update(
-        pads,
-        pad_ref,
-        fn %{queue: queue} = pad ->
-          {byte_size(queue) + byte_size(payload), %{pad | queue: queue <> payload}}
-        end
-      )
-
-    time_frame = RawAudio.frame_size(stream_format)
-    mix_and_redemand(size, time_frame, context, %{state | pads: pads})
-  end
-
-  @impl true
-  def handle_stream_format(_pad, stream_format, _context, %{stream_format: nil} = state) do
-    state = %{state | stream_format: stream_format}
-    mixer_state = initialize_mixer_state(stream_format, state)
-
-    {[stream_format: {:output, stream_format}, redemand: :output],
-     %{state | mixer_state: mixer_state}}
-  end
-
-  @impl true
-  def handle_stream_format(
-        _pad,
-        %Membrane.RemoteStream{} = _input_stream,
-        _context,
-        %{stream_format: nil} = _state
-      ) do
+  defp set_stream_format(%RemoteStream{}, _state) do
     raise """
-    You need to specify `stream_format` in options if `Membrane.RemoteStream` will be received on the `:input` pad
+    You need to specify `stream_format` in options if `Membrane.RemoteStream` will be received on the `:input` \
+    pad and you cannot pass `Membrane.RemoteStream{}` in this option.
     """
   end
 
-  @impl true
-  def handle_stream_format(_pad, stream_format, _context, %{stream_format: stream_format} = state) do
-    {[], state}
+  defp set_stream_format(stream_format, state) when stream_format != nil do
+    state =
+      %{
+        state
+        | stream_format: stream_format,
+          sample_size: RawAudio.frame_size(stream_format),
+          mixer_state: initialize_mixer_state(stream_format, state)
+      }
+
+    {[stream_format: {:output, stream_format}, redemand: :output], state}
   end
 
-  @impl true
-  def handle_stream_format(_pad, %Membrane.RemoteStream{} = _input_stream, _context, state) do
-    {[], state}
+  defp validate_input_stream_format!(_pad, %RemoteStream{}, _state), do: :ok
+
+  defp validate_input_stream_format!(_pad, stream_format, %{stream_format: stream_format}),
+    do: :ok
+
+  defp validate_input_stream_format!(pad, stream_format, state) do
+    raise """
+    Received invalid stream_format on pad #{inspect(pad)}, expected: #{inspect(state.stream_format)}, \
+    got: #{inspect(stream_format)}
+    """
   end
 
-  @impl true
-  def handle_stream_format(pad, stream_format, _context, state) do
-    raise(
-      RuntimeError,
-      "received invalid stream_format on pad #{inspect(pad)}, expected: #{inspect(state.stream_format)}, got: #{inspect(stream_format)}"
-    )
-  end
-
-  defp mix_and_redemand(size, time_frame, context, state) do
-    if size >= time_frame do
-      {actions, state} = mix_and_get_actions(context, state)
-      {actions ++ [redemand: :output], state}
-    else
-      {[redemand: :output], state}
+  defp initialize_mixer_state(stream_format, state) do
+    cond do
+      not state.prevent_clipping -> Adder.init(stream_format)
+      state.native_mixer -> NativeAdder.init(stream_format)
+      true -> ClipPreventingAdder.init(stream_format)
     end
   end
 
-  defp initialize_mixer_state(nil, _state), do: nil
+  @impl true
+  def handle_buffer(pad, buffer, ctx, state) do
+    pad_data =
+      with %{synchronized?: false} = pad_data <- Map.fetch!(state.pads_data, pad) do
+        silence_duration =
+          if state.synchronize_buffers?,
+            do: buffer.pts + pad_data.offset - state.last_ts_sent,
+            else: pad_data.offset
 
-  defp initialize_mixer_state(stream_format, state) do
-    mixer_module =
-      if state.prevent_clipping do
-        if state.native_mixer, do: NativeAdder, else: ClipPreventingAdder
-      else
-        Adder
+        silence_payload =
+          if silence_duration >= 0,
+            do: RawAudio.silence(state.stream_format, silence_duration),
+            else: <<>>
+
+        %{pad_data | synchronized?: true, queue: silence_payload}
       end
+      |> Map.update!(:queue, &(&1 <> buffer.payload))
 
-    mixer_module.init(stream_format)
+    state = put_in(state, [:pads_data, pad], pad_data)
+
+    {mix_actions, state} =
+      if byte_size(pad_data.queue) >= state.sample_size,
+        do: mix(ctx, state),
+        else: {[], state}
+
+    {mix_actions ++ [redemand: :output], state}
   end
 
-  defp do_handle_demand(size, %{pads: pads} = state) do
-    pads
-    |> Enum.map(fn {pad, %{queue: queue}} ->
-      queue
-      |> byte_size()
-      |> then(&{:demand, {pad, max(0, size - &1)}})
-    end)
-    |> then(fn demands -> {demands, state} end)
+  @impl true
+  def handle_end_of_stream(pad, ctx, state) do
+    queue_size = get_in(state, [:pads_data, pad, :queue]) |> byte_size()
+
+    state =
+      if queue_size < state.sample_size,
+        do: state |> Bunch.Access.delete_in([:pads_data, pad]),
+        else: state
+
+    mix(ctx, state)
   end
 
-  defp mix_and_get_actions(context, %{stream_format: stream_format, pads: pads} = state) do
-    time_frame = RawAudio.frame_size(stream_format)
-    mix_size = get_mix_size(pads, time_frame)
+  defp mix(ctx, %{stream_format: stream_format} = state) do
+    mix_size = calculate_mix_size(state)
+    buffer_ts = state.last_ts_sent
 
-    {payload, state} =
-      if mix_size >= time_frame do
-        {payload, pads, state} = mix(pads, mix_size, state)
-        pads = remove_finished_pads(context, pads, time_frame)
-        mix_time = RawAudio.bytes_to_time(mix_size, stream_format)
-        state = %{state | pads: pads, last_ts_sent: state.last_ts_sent + mix_time}
+    {mixed_data, state} =
+      if mix_size >= state.sample_size do
+        {payloads, state} = pop_payloads_from_queues(mix_size, ctx, state)
+        {mixed_data, state} = apply_mixer_fun(:mix, [payloads], state)
 
-        {payload, state}
+        mixed_data_duration = RawAudio.bytes_to_time(mix_size, stream_format)
+        state = Map.update!(state, :last_ts_sent, &(&1 + mixed_data_duration))
+
+        {mixed_data, state}
       else
         {<<>>, state}
       end
 
-    {payload, state} =
-      if all_streams_ended?(context) do
-        {flushed, state} = flush_mixer(state)
-        {payload <> flushed, state}
+    send_end_of_stream? =
+      ctx.pads
+      |> Enum.all?(fn {pad, data} -> pad == :output or data.end_of_stream? end)
+
+    {output_payload, state} =
+      if send_end_of_stream? do
+        {flushed_data, state} = apply_mixer_fun(:flush, [], state)
+        {mixed_data <> flushed_data, state}
       else
-        {payload, state}
+        {mixed_data, state}
       end
 
-    actions = if payload == <<>>, do: [], else: [buffer: {:output, %Buffer{payload: payload}}]
+    buffer_action =
+      if output_payload != <<>> do
+        buffer = %Buffer{payload: output_payload, pts: buffer_ts, dts: buffer_ts}
+        [buffer: {:output, buffer}]
+      else
+        []
+      end
+
+    actions =
+      if send_end_of_stream?,
+        do: buffer_action ++ [end_of_stream: :output],
+        else: buffer_action
+
     {actions, state}
   end
 
-  defp get_mix_size(pads, time_frame) do
-    pads
-    |> Enum.map(fn {_pad, %{queue: queue}} -> byte_size(queue) end)
-    |> Enum.min(fn -> 0 end)
-    |> int_part(time_frame)
+  defp calculate_mix_size(state) do
+    min_queue_size =
+      state.pads_data
+      |> Enum.map(fn {_pad, %{queue: queue}} -> byte_size(queue) end)
+      |> Enum.min(fn -> 0 end)
+
+    min_queue_size - rem(min_queue_size, state.sample_size)
   end
 
-  # Returns the biggest multiple of `divisor` that is not bigger than `number`
-  defp int_part(number, divisor) when is_integer(number) and is_integer(divisor) do
-    rest = rem(number, divisor)
-    number - rest
-  end
-
-  defp mix(pads, mix_size, state) do
+  defp pop_payloads_from_queues(mix_size, ctx, state) do
     {payloads, pads_list} =
-      pads
+      state.pads_data
       |> Enum.map(fn
-        {pad, %{queue: <<payload::binary-size(mix_size)>> <> queue} = data} ->
-          {payload, {pad, %{data | queue: queue}}}
+        {pad, %{queue: <<payload::binary-size(mix_size)>> <> tail} = data} ->
+          {payload, {pad, %{data | queue: tail}}}
       end)
       |> Enum.unzip()
 
-    {payload, state} = mix_payloads(payloads, state)
-    pads = Map.new(pads_list)
+    pads_data =
+      pads_list
+      |> Enum.reject(fn {pad, %{queue: queue}} ->
+        ctx.pads[pad].end_of_stream? and byte_size(queue) < state.sample_size
+      end)
+      |> Map.new()
 
-    {payload, pads, state}
+    {payloads, %{state | pads_data: pads_data}}
   end
 
-  defp all_streams_ended?(%{pads: pads}) do
-    pads
-    |> Enum.filter(fn {pad_name, _info} -> pad_name != :output end)
-    |> Enum.map(fn {_pad, %{end_of_stream?: end_of_stream?}} -> end_of_stream? end)
-    |> Enum.all?()
-  end
-
-  defp remove_finished_pads(context, pads, time_frame) do
-    pads
-    |> Enum.flat_map(&maybe_remove_pad(time_frame, context, &1))
-    |> Map.new()
-  end
-
-  defp maybe_remove_pad(time_frame, context, {pad, %{queue: queue}} = pad_data) do
-    end_of_stream = Map.get(context.pads, pad).end_of_stream?
-    to_short_to_mix = byte_size(queue) < time_frame
-    if end_of_stream and to_short_to_mix, do: [], else: [pad_data]
-  end
-
-  defp mix_payloads(payloads, %{mixer_state: %module{} = mixer_state} = state) do
-    {payload, mixer_state} = module.mix(payloads, mixer_state)
-    state = %{state | mixer_state: mixer_state}
-    {payload, state}
-  end
-
-  defp flush_mixer(%{mixer_state: %module{} = mixer_state} = state) do
-    {payload, mixer_state} = module.flush(mixer_state)
-    state = %{state | mixer_state: mixer_state}
-    {payload, state}
+  defp apply_mixer_fun(fun_name, args, state) do
+    Map.get_and_update!(state, :mixer_state, fn %mixer_module{} = mixer_state ->
+      apply(mixer_module, fun_name, args ++ [mixer_state])
+    end)
   end
 end

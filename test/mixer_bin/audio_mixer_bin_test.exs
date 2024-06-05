@@ -92,6 +92,8 @@ defmodule Membrane.AudioMixerBinTest do
 
       assert_start_of_stream(pipeline, :file_sink, :input)
       assert_end_of_stream(pipeline, :file_sink, :input)
+
+      Pipeline.terminate(pipeline)
     end
 
     test "there's only one input", ctx do
