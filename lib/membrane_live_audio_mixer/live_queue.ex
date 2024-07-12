@@ -40,7 +40,8 @@ defmodule Membrane.LiveAudioMixer.LiveQueue do
   def add_queue(lq, id, offset \\ 0)
 
   def add_queue(lq, id, offset) when offset >= 0 do
-    if get_in(lq, [:queues, id]) != nil, do: raise("Queue with id: '#{id}' already exists.")
+    if get_in(lq, [:queues, id]) != nil,
+      do: raise("Queue with id: '#{inspect(id)}' already exists.")
 
     queue = %Queue{offset: offset}
     put_in(lq, [:queues, id], queue)
@@ -54,13 +55,14 @@ defmodule Membrane.LiveAudioMixer.LiveQueue do
   """
   @spec remove_queue(t(), any()) :: t()
   def remove_queue(lq, id) do
-    if not Map.has_key?(lq.queues, id), do: raise("Queue with id: '#{id}' doesn't exists")
+    if not Map.has_key?(lq.queues, id),
+      do: raise("Queue with id: '#{inspect(id)}' doesn't exists")
 
     queue = lq.queues[id]
 
     cond do
       queue.draining? ->
-        raise "Queue with id: '#{id}' is already marked as draining"
+        raise "Queue with id: '#{inspect(id)}' is already marked as draining"
 
       queue.buffer_duration == 0 ->
         {_queue, lq} = pop_in(lq, [:queues, id])
