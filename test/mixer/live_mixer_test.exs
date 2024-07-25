@@ -52,13 +52,13 @@ defmodule Membrane.LiveAudioMixerTest do
 
     assert pipeline = Pipeline.start_link_supervised!(spec: spec)
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
-    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    Pipeline.notify_child(pipeline, :mixer, :schedule_eos)
 
     spec = add_audio_source(2)
 
     Pipeline.execute_actions(pipeline, spec: spec)
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
-    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    Pipeline.notify_child(pipeline, :mixer, :schedule_eos)
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     check_output_duration(output_path)
@@ -76,14 +76,14 @@ defmodule Membrane.LiveAudioMixerTest do
     ]
 
     assert pipeline = Pipeline.start_link_supervised!(spec: spec)
-    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    Pipeline.notify_child(pipeline, :mixer, :schedule_eos)
 
     spec = add_audio_source(1) ++ add_audio_source(2)
 
     Pipeline.execute_actions(pipeline, spec: spec)
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
-    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    Pipeline.notify_child(pipeline, :mixer, :schedule_eos)
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     check_output_duration(output_path)
@@ -98,7 +98,7 @@ defmodule Membrane.LiveAudioMixerTest do
     links = create_links()
 
     assert pipeline = Pipeline.start_link_supervised!(spec: elements ++ links)
-    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    Pipeline.notify_child(pipeline, :mixer, :schedule_eos)
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     spec = add_audio_source(3)
@@ -132,7 +132,7 @@ defmodule Membrane.LiveAudioMixerTest do
 
     assert pipeline = Pipeline.start_link_supervised!(spec: spec)
 
-    Pipeline.message_child(pipeline, :mixer, {:start_mixing, 0})
+    Pipeline.notify_child(pipeline, :mixer, {:start_mixing, 0})
 
     # audio duration has to be equal or longer than 15 seconds
     # input audio has 10 seconds
@@ -145,7 +145,7 @@ defmodule Membrane.LiveAudioMixerTest do
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
 
-    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    Pipeline.notify_child(pipeline, :mixer, :schedule_eos)
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     check_output_duration(output_path, 15)
@@ -170,9 +170,9 @@ defmodule Membrane.LiveAudioMixerTest do
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
 
-    Pipeline.message_child(pipeline, :mixer, {:start_mixing, 0})
+    Pipeline.notify_child(pipeline, :mixer, {:start_mixing, 0})
 
-    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    Pipeline.notify_child(pipeline, :mixer, :schedule_eos)
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     check_output_duration(output_path)
@@ -194,13 +194,13 @@ defmodule Membrane.LiveAudioMixerTest do
     # time for the pipeline to enter playing playback
     Process.sleep(100)
 
-    Pipeline.message_child(pipeline, :mixer, {:start_mixing, 0})
+    Pipeline.notify_child(pipeline, :mixer, {:start_mixing, 0})
 
     # audio duration has to be equal or longer than 5 seconds
     # thats why sleep is a little longer than 5 seconds
     Process.sleep(5_300)
 
-    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    Pipeline.notify_child(pipeline, :mixer, :schedule_eos)
 
     assert_end_of_stream(pipeline, :file_sink, :input, 1_000)
 
@@ -220,12 +220,12 @@ defmodule Membrane.LiveAudioMixerTest do
 
     assert pipeline = Pipeline.start_link_supervised!(spec: spec)
 
-    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    Pipeline.notify_child(pipeline, :mixer, :schedule_eos)
 
     spec = add_audio_source(1) ++ add_audio_source(2)
     Pipeline.execute_actions(pipeline, spec: spec)
 
-    Pipeline.message_child(pipeline, :mixer, {:start_mixing, 0})
+    Pipeline.notify_child(pipeline, :mixer, {:start_mixing, 0})
 
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
@@ -253,7 +253,7 @@ defmodule Membrane.LiveAudioMixerTest do
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 1))
     assert_start_of_stream(pipeline, :mixer, Pad.ref(:input, 2))
 
-    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    Pipeline.notify_child(pipeline, :mixer, :schedule_eos)
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
     check_output_duration(output_path)

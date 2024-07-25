@@ -428,7 +428,7 @@ defmodule Membrane.CommonMixerTest do
   defp do_perform_test(spec, reference_path, output_path, true) do
     assert pipeline = Pipeline.start_link_supervised!(spec: spec)
 
-    Pipeline.message_child(pipeline, :mixer, :schedule_eos)
+    Pipeline.notify_child(pipeline, :mixer, :schedule_eos)
 
     assert_end_of_stream(pipeline, :file_sink, :input, 20_000)
 
