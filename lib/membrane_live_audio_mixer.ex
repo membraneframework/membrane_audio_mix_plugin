@@ -198,7 +198,7 @@ defmodule Membrane.LiveAudioMixer do
     offset =
       case context.pads[pad].options.offset do
         :live -> live_queue.current_time
-        _ -> context.pads[pad].options.offset
+        offset -> offset
       end
 
     new_live_queue = LiveQueue.add_queue(live_queue, pad_id, offset)
