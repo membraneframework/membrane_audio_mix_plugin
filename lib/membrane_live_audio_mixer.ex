@@ -16,7 +16,7 @@ defmodule Membrane.LiveAudioMixer do
     Audio that will come before the notification will be buffered.
 
   Input pads can have offset - it tells how much timestamps differ from mixer time.
-  Setting offset to `live` adjusts the offset to the current mixer timer.
+  Setting offset to `:live` adjusts the offset to the current mixer timer.
 
   ```elixir
   get_child(:a_new_input)
