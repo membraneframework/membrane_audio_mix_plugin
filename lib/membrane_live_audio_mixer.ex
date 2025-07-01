@@ -16,6 +16,18 @@ defmodule Membrane.LiveAudioMixer do
     Audio that will come before the notification will be buffered.
 
   Input pads can have offset - it tells how much timestamps differ from mixer time.
+  Setting offset to `:live` adjusts the offset to the current mixer timer.
+
+  ```elixir
+  get_child(:a_new_input)
+
+  # Choose one:
+  |> via_in(:input, options: [offset: 0]) # Identical to not setting the option
+  |> via_in(:input, options: [offset: 1_000])
+  |> via_in(:input, options: [offset: :live])
+
+  |> child(:livemixer, Membrane.LiveAudioMixer)
+  ```
   """
 
   use Membrane.Filter
@@ -89,9 +101,10 @@ defmodule Membrane.LiveAudioMixer do
       when sample_format in [:s8, :s16le, :s16be, :s24le, :s24be, :s32le, :s32be],
     options: [
       offset: [
-        spec: Time.non_neg(),
+        spec: Time.non_neg() | :live,
         default: 0,
-        description: "Offset of the input audio at the pad."
+        description:
+          "Offset of the input audio at the pad. `:live` sets the offset to the current mixing position."
       ]
     ]
 
@@ -182,7 +195,12 @@ defmodule Membrane.LiveAudioMixer do
         context,
         %{live_queue: live_queue, started?: started?} = state
       ) do
-    offset = context.pads[pad].options.offset
+    offset =
+      case context.pads[pad].options.offset do
+        :live -> live_queue.current_time
+        _ -> context.pads[pad].options.offset
+      end
+
     new_live_queue = LiveQueue.add_queue(live_queue, pad_id, offset)
 
     {actions, started?} =
