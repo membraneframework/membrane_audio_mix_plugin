@@ -1,8 +1,8 @@
 defmodule Membrane.LiveAudioMixer.LiveQueueTest do
   use ExUnit.Case, async: true
 
-  alias Membrane.LiveAudioMixer.LiveQueue
   alias Membrane.{Buffer, RawAudio, Time}
+  alias Membrane.LiveAudioMixer.LiveQueue
 
   @stream_format %RawAudio{
     channels: 1,

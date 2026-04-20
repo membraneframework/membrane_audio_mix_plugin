@@ -13,10 +13,7 @@ defmodule Membrane.AudioMix.Mixfile do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      dialyzer: [
-        plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
-        flags: [:error_handling]
-      ],
+      dialyzer: dialyzer(),
 
       # hex
       description: "Plugin performing raw audio mixing and interleaving.",
@@ -46,13 +43,28 @@ defmodule Membrane.AudioMix.Mixfile do
       {:membrane_raw_audio_format, "~> 0.12.0"},
       {:unifex, "~> 1.0"},
       {:bunch, "~> 1.3"},
-      {:ex_doc, ">= 0.0.0", only: :dev, runtime: false},
-      {:dialyxir, ">= 0.0.0", only: :dev, runtime: false},
-      {:credo, ">= 0.0.0", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.34", only: :dev, runtime: false},
+      {:dialyxir, "~> 1.4", only: :dev, runtime: false},
+      {:credo, "~> 1.7", only: :dev, runtime: false},
       {:membrane_file_plugin, "~> 0.16.0", only: :test},
       {:membrane_mp3_mad_plugin, "~> 0.18.0", only: :test},
       {:membrane_realtimer_plugin, "~> 0.9.0", only: :test}
     ]
+  end
+
+  defp dialyzer() do
+    opts = [
+      flags: [:error_handling],
+      plt_add_apps: [:mix, :syntax_tools]
+    ]
+
+    if System.get_env("CI") == "true" do
+      # Store PLTs in cacheable directory for CI
+      File.mkdir_p!(Path.join([__DIR__, "priv", "plts"]))
+      [plt_local_path: "priv/plts", plt_core_path: "priv/plts"] ++ opts
+    else
+      opts
+    end
   end
 
   defp package do

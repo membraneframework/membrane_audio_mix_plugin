@@ -71,7 +71,7 @@ defmodule Membrane.AudioMixer.ClipPreventingAdder do
         add_values(rest, is_last_wave, state, buffer)
       end
     else
-      state = %__MODULE__{state | queue: state.queue ++ values}
+      state = %{state | queue: state.queue ++ values}
       {buffer, state}
     end
   end
