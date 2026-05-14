@@ -1,7 +1,7 @@
 defmodule Membrane.AudioMix.Mixfile do
   use Mix.Project
 
-  @version "0.16.3"
+  @version "0.16.4"
   @github_url "https://github.com/membraneframework/membrane_audio_mix_plugin"
 
   def project do
@@ -13,10 +13,7 @@ defmodule Membrane.AudioMix.Mixfile do
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
       deps: deps(),
-      dialyzer: [
-        plt_file: {:no_warn, "priv/plts/dialyzer.plt"},
-        flags: [:error_handling]
-      ],
+      dialyzer: dialyzer(),
 
       # hex
       description: "Plugin performing raw audio mixing and interleaving.",
@@ -53,6 +50,20 @@ defmodule Membrane.AudioMix.Mixfile do
       {:membrane_mp3_mad_plugin, "~> 0.18.0", only: :test},
       {:membrane_realtimer_plugin, "~> 0.9.0", only: :test}
     ]
+  end
+
+  defp dialyzer() do
+    opts = [
+      flags: [:error_handling]
+    ]
+
+    if System.get_env("CI") == "true" do
+      # Store PLTs in cacheable directory for CI
+      File.mkdir_p!(Path.join([__DIR__, "priv", "plts"]))
+      [plt_local_path: "priv/plts", plt_core_path: "priv/plts"] ++ opts
+    else
+      opts
+    end
   end
 
   defp package do
