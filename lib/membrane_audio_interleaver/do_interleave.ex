@@ -16,7 +16,7 @@ defmodule Membrane.AudioInterleaver.DoInterleave do
   def interleave(bytes_per_channel, _sample_size, pads, _order) when map_size(pads) == 1 do
     [{pad, data}] = Map.to_list(pads)
 
-    <<payload::binary-size(bytes_per_channel), remaining_queue::binary>> = data.queue
+    <<payload::binary-size(^bytes_per_channel), remaining_queue::binary>> = data.queue
     pads = %{pad => %{data | queue: remaining_queue}}
 
     {payload, pads}
@@ -52,7 +52,7 @@ defmodule Membrane.AudioInterleaver.DoInterleave do
   defp get_payloads(payload_size, pads_inorder) do
     pads_inorder
     |> Enum.map(fn
-      {pad, %{queue: <<payload::binary-size(payload_size), rest::binary>>} = data} ->
+      {pad, %{queue: <<payload::binary-size(^payload_size), rest::binary>>} = data} ->
         {payload, {pad, %{data | queue: rest}}}
     end)
     |> Enum.unzip()

@@ -6,7 +6,7 @@ defmodule Membrane.AudioMixer.Helpers do
     {chunks, rests} =
       binaries
       |> Enum.flat_map(fn
-        <<chunk::binary-size(chunk_size), rest::binary>> -> [{chunk, rest}]
+        <<chunk::binary-size(^chunk_size), rest::binary>> -> [{chunk, rest}]
         _binary -> []
       end)
       |> Enum.unzip()

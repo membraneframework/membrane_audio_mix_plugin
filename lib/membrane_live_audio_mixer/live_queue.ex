@@ -131,7 +131,7 @@ defmodule Membrane.LiveAudioMixer.LiveQueue do
       {false, true} ->
         drop_duration = queue_ts - pts
         drop_bytes = RawAudio.time_to_bytes(drop_duration, stream_format)
-        <<_rest::binary-size(drop_bytes), to_add::binary>> = payload
+        <<_rest::binary-size(^drop_bytes), to_add::binary>> = payload
 
         to_add_duration = payload_duration - drop_duration
 
@@ -165,7 +165,7 @@ defmodule Membrane.LiveAudioMixer.LiveQueue do
       {audio, %{queue | buffer: <<>>, buffer_duration: 0}}
     else
       bytes = RawAudio.time_to_bytes(duration, stream_format)
-      <<audio::binary-size(bytes), new_buffer::binary>> = queue.buffer
+      <<audio::binary-size(^bytes), new_buffer::binary>> = queue.buffer
       {audio, %{queue | buffer: new_buffer, buffer_duration: queue.buffer_duration - duration}}
     end
   end

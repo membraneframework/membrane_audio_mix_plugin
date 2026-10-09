@@ -311,7 +311,7 @@ defmodule Membrane.AudioMixer do
     {payloads, pads_list} =
       state.pads_data
       |> Enum.map(fn
-        {pad, %{queue: <<payload::binary-size(mix_size)>> <> tail} = data} ->
+        {pad, %{queue: <<payload::binary-size(^mix_size)>> <> tail} = data} ->
           {payload, {pad, %{data | queue: tail}}}
       end)
       |> Enum.unzip()
