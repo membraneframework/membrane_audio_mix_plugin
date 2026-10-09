@@ -185,16 +185,6 @@ defmodule Membrane.AudioInterleaver do
   end
 
   @impl true
-  def handle_stream_format(_pad, input_stream_format, _ctx, %{input_stream_format: nil} = state) do
-    state = %{state | input_stream_format: input_stream_format}
-
-    {[
-       stream_format: {:output, %{input_stream_format | channels: state.channels}},
-       redemand: :output
-     ], state}
-  end
-
-  @impl true
   def handle_stream_format(
         _pad,
         %Membrane.RemoteStream{} = _input_stream_format,
@@ -204,6 +194,16 @@ defmodule Membrane.AudioInterleaver do
     raise """
     You need to specify `input_stream_format` in options if `Membrane.RemoteStream` will be received on the `:input` pad
     """
+  end
+
+  @impl true
+  def handle_stream_format(_pad, input_stream_format, _ctx, %{input_stream_format: nil} = state) do
+    state = %{state | input_stream_format: input_stream_format}
+
+    {[
+       stream_format: {:output, %{input_stream_format | channels: state.channels}},
+       redemand: :output
+     ], state}
   end
 
   @impl true

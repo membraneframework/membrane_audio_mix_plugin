@@ -438,7 +438,9 @@ defmodule Membrane.CommonMixerTest do
     # Live audio mixer produces audio chunks in intervals.
     # Each tick produces the same amount of audio.
     # So before eof stream live mixer can produce additional silence.
-    assert <<^reference_file::binary-size(byte_size(reference_file)), _rest::binary>> =
+    reference_size = byte_size(reference_file)
+
+    assert <<^reference_file::binary-size(^reference_size), _rest::binary>> =
              output_file
 
     Pipeline.terminate(pipeline)
