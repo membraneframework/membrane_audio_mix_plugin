@@ -1,7 +1,7 @@
 defmodule Membrane.AudioMix.Mixfile do
   use Mix.Project
 
-  @version "0.16.6"
+  @version "0.16.7"
   @github_url "https://github.com/membraneframework/membrane_audio_mix_plugin"
 
   def project do
