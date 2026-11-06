@@ -143,6 +143,7 @@ void chunk_and_scale_to_samples(int64_t *values, uint32_t values_length,
                                 uint8_t *samples, uint32_t *samples_length,
                                 UnifexState *state) {
   if (values_length == 0 || !values) {
+    *samples_length = 0;
     return;
   }
 

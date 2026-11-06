@@ -271,4 +271,14 @@ defmodule Membrane.AudioMixer.NativeMixerTest do
     assert {:ok, _state} = Native.init(2, RawAudio.SampleFormat.serialize(:s16le), 44_100)
     assert_raise ErlangError, fn -> Native.init(2, 0, 44_100) end
   end
+
+  test "mix with no input keeps the queue and returns nothing" do
+    assert {:ok, state} = Native.init(1, RawAudio.SampleFormat.serialize(:s16le), 16_000)
+
+    # samples of one sign are queued until the sign changes
+    assert {:ok, <<>>, state} = Native.mix([<<1, 0, 2, 0>>], state)
+    assert {:ok, <<>>, state} = Native.mix([], state)
+    assert {:ok, <<>>, state} = Native.mix([<<>>], state)
+    assert {:ok, <<1, 0, 2, 0>>, _state} = Native.flush(state)
+  end
 end
