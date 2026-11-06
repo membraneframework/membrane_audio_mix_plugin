@@ -7,13 +7,19 @@
 UNIFEX_TERM init(UnifexEnv *env, int32_t channels, uint32_t sample_format,
                  int32_t sample_rate) {
   UNIFEX_TERM res;
+  RawAudioFormat stream_format = {
+      .sample_format = sample_format, .channels = channels, .sample_rate = sample_rate};
+  uint32_t sample_size = raw_audio_format_sample_byte_size(&stream_format);
+  // mix and flush divide by sample_size
+  if (sample_size == 0 || sample_size > MAX_SIZE) {
+    return unifex_raise(env, "Unsupported sample format");
+  }
+
   State *state = unifex_alloc_state(env);
-  state->stream_format.sample_format = sample_format;
-  state->stream_format.channels = channels;
-  state->stream_format.sample_rate = sample_rate;
+  state->stream_format = stream_format;
   state->sample_max = raw_audio_format_sample_max(&state->stream_format);
   state->sample_min = raw_audio_format_sample_min(&state->stream_format);
-  state->sample_size = raw_audio_format_sample_byte_size(&state->stream_format);
+  state->sample_size = sample_size;
   state->queue = NULL;
   state->queue_length = 0;
   state->is_wave_positive = false;
