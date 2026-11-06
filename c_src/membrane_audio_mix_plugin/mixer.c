@@ -143,6 +143,7 @@ void chunk_and_scale_to_samples(int64_t *values, uint32_t values_length,
                                 uint8_t *samples, uint32_t *samples_length,
                                 UnifexState *state) {
   if (values_length == 0 || !values) {
+    *samples_length = 0;
     return;
   }
 
@@ -203,13 +204,8 @@ UNIFEX_TERM mix(UnifexEnv *env, UnifexPayload **buffers,
   uint32_t output_size = output_length * state->sample_size;
   unifex_payload_alloc(env, UNIFEX_PAYLOAD_BINARY, output_size, &out_payload);
 
-  if (values_length > 0) {
-    chunk_and_scale_to_samples(values, values_length, out_payload.data,
-                               &output_length, state);
-  } else {
-    // nothing to mix, keep the queue and emit nothing
-    output_length = 0;
-  }
+  chunk_and_scale_to_samples(values, values_length, out_payload.data,
+                             &output_length, state);
   unifex_free(values);
   if (output_length < initial_output_length) {
     unifex_payload_realloc(&out_payload, output_length * state->sample_size);
